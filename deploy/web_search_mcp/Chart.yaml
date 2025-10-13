@@ -1,0 +1,16 @@
+apiVersion: v2
+name: web-search-mcp
+description: A Helm chart for Web Search MCP Server with Cheerio
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - mcp
+  - web-search
+  - cheerio
+  - scraping
+maintainers:
+  - name: Your Name
+    email: your.email@example.local
+sources:
+  - https://github.com/example/cheerio-mcp
