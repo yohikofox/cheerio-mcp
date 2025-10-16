@@ -153,7 +153,21 @@ export async function searchDuckDuckGo(
 
       if (title && url) {
         // Convert protocol-relative URLs to https
-        const fullUrl = url.startsWith("//") ? `https:${url}` : url;
+        let fullUrl = url.startsWith("//") ? `https:${url}` : url;
+
+        // Extract real URL from DuckDuckGo redirect
+        if (fullUrl.includes("duckduckgo.com/l/?uddg=")) {
+          try {
+            const urlObj = new URL(fullUrl);
+            const realUrl = urlObj.searchParams.get("uddg");
+            if (realUrl) {
+              fullUrl = decodeURIComponent(realUrl);
+              console.error(`Extracted real URL: ${fullUrl}`);
+            }
+          } catch (e) {
+            console.error(`Failed to extract real URL from: ${fullUrl}`);
+          }
+        }
 
         results.push({
           title,

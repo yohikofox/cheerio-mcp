@@ -9,6 +9,8 @@ import {
 
 import { searchGoogle, searchDuckDuckGo, searchBing, SearchEngineResult } from './searchEngines.js';
 import { scrapePage, scrapeMultiplePages, PageContent } from './scraper.js';
+import { scrapePageRaw, scrapeMultiplePagesRaw, RawPageContent } from './scraper-raw.js';
+import { scrapePageWithPlaywright, scrapeMultiplePagesWithPlaywright } from './scraper-playwright.js';
 
 const server = new Server(
   {
@@ -114,6 +116,112 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['query'],
         },
       },
+      {
+        name: 'scrape_page_raw',
+        description: 'Extract raw structured data from a web page as label/value pairs in YAML or JSON format. Perfect for e-commerce sites with tables, prices, specifications.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            url: {
+              type: 'string',
+              description: 'The URL of the page to scrape',
+            },
+            flatten: {
+              type: 'boolean',
+              description: 'Flatten the data structure (default: true)',
+              default: true,
+            },
+            format: {
+              type: 'string',
+              description: 'Output format: yaml or json (default: yaml)',
+              enum: ['yaml', 'json'],
+              default: 'yaml',
+            },
+          },
+          required: ['url'],
+        },
+      },
+      {
+        name: 'scrape_multiple_pages_raw',
+        description: 'Extract raw structured data from multiple web pages in parallel.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            urls: {
+              type: 'array',
+              description: 'Array of URLs to scrape',
+              items: {
+                type: 'string',
+              },
+            },
+            flatten: {
+              type: 'boolean',
+              description: 'Flatten the data structure (default: true)',
+              default: true,
+            },
+            format: {
+              type: 'string',
+              description: 'Output format: yaml or json (default: yaml)',
+              enum: ['yaml', 'json'],
+              default: 'yaml',
+            },
+          },
+          required: ['urls'],
+        },
+      },
+      {
+        name: 'scrape_page_dynamic',
+        description: 'Extract raw data from a JavaScript-heavy web page using headless browser (Playwright). Perfect for sites with dynamic content like Klarna, SPAs, etc. Returns label/value pairs in YAML or JSON.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            url: {
+              type: 'string',
+              description: 'The URL of the page to scrape',
+            },
+            flatten: {
+              type: 'boolean',
+              description: 'Flatten the data structure (default: true)',
+              default: true,
+            },
+            format: {
+              type: 'string',
+              description: 'Output format: yaml or json (default: yaml)',
+              enum: ['yaml', 'json'],
+              default: 'yaml',
+            },
+          },
+          required: ['url'],
+        },
+      },
+      {
+        name: 'scrape_multiple_pages_dynamic',
+        description: 'Extract raw data from multiple JavaScript-heavy web pages using headless browser.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            urls: {
+              type: 'array',
+              description: 'Array of URLs to scrape',
+              items: {
+                type: 'string',
+              },
+            },
+            flatten: {
+              type: 'boolean',
+              description: 'Flatten the data structure (default: true)',
+              default: true,
+            },
+            format: {
+              type: 'string',
+              description: 'Output format: yaml or json (default: yaml)',
+              enum: ['yaml', 'json'],
+              default: 'yaml',
+            },
+          },
+          required: ['urls'],
+        },
+      },
     ],
   };
 });
@@ -217,6 +325,116 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               searchResults: searchResult,
               scrapedPages: scrapedContent,
             }, null, 2),
+          },
+        ],
+      };
+    }
+
+    if (name === 'scrape_page_raw') {
+      const { url, flatten = true, format = 'yaml' } = args as {
+        url: string;
+        flatten?: boolean;
+        format?: 'yaml' | 'json';
+      };
+
+      const content = await scrapePageRaw(url, { flatten, format });
+
+      // Return YAML string if format is yaml, otherwise return JSON
+      const outputText = format === 'yaml' && content.yaml
+        ? content.yaml
+        : JSON.stringify(content, null, 2);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: outputText,
+          },
+        ],
+      };
+    }
+
+    if (name === 'scrape_multiple_pages_raw') {
+      const { urls, flatten = true, format = 'yaml' } = args as {
+        urls: string[];
+        flatten?: boolean;
+        format?: 'yaml' | 'json';
+      };
+
+      const contents = await scrapeMultiplePagesRaw(urls, { flatten, format });
+
+      // Return YAML string if format is yaml, otherwise return JSON
+      if (format === 'yaml') {
+        const yamlOutput = contents.map(c => `---\nurl: ${c.url}\ntitle: ${c.title}\n${c.yaml || ''}`).join('\n\n');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: yamlOutput,
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(contents, null, 2),
+          },
+        ],
+      };
+    }
+
+    if (name === 'scrape_page_dynamic') {
+      const { url, flatten = true, format = 'yaml' } = args as {
+        url: string;
+        flatten?: boolean;
+        format?: 'yaml' | 'json';
+      };
+
+      const content = await scrapePageWithPlaywright(url, { flatten, format });
+
+      const outputText = format === 'yaml' && content.yaml
+        ? content.yaml
+        : JSON.stringify(content, null, 2);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: outputText,
+          },
+        ],
+      };
+    }
+
+    if (name === 'scrape_multiple_pages_dynamic') {
+      const { urls, flatten = true, format = 'yaml' } = args as {
+        urls: string[];
+        flatten?: boolean;
+        format?: 'yaml' | 'json';
+      };
+
+      const contents = await scrapeMultiplePagesWithPlaywright(urls, { flatten, format });
+
+      if (format === 'yaml') {
+        const yamlOutput = contents.map(c => `---\nurl: ${c.url}\ntitle: ${c.title}\n${c.yaml || ''}`).join('\n\n');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: yamlOutput,
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(contents, null, 2),
           },
         ],
       };
