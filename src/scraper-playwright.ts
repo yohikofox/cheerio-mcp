@@ -9,11 +9,67 @@ export interface RawDataItem {
   attributes?: Record<string, string>;
 }
 
+export interface ScrapingStats {
+  totalItems: number;
+  itemsByType: {
+    table: number;
+    text: number;
+    image: number;
+    price: number;
+  };
+  estimatedTokens: number;
+  scrapingTimeMs: number;
+}
+
 export interface RawPageContent {
   url: string;
   title: string;
   data: RawDataItem[];
+  stats?: ScrapingStats;
   yaml?: string;
+}
+
+/**
+ * Estimate token count using a simple heuristic (approximately 4 chars per token)
+ */
+function estimateTokenCount(text: string): number {
+  // Rough estimation: 1 token ≈ 4 characters for English text
+  // For YAML/structured data, we use a slightly different ratio
+  return Math.ceil(text.length / 3.5);
+}
+
+/**
+ * Calculate statistics for scraped data
+ */
+function calculateStats(data: RawDataItem[], scrapingTimeMs: number): ScrapingStats {
+  const stats: ScrapingStats = {
+    totalItems: data.length,
+    itemsByType: {
+      table: 0,
+      text: 0,
+      image: 0,
+      price: 0
+    },
+    estimatedTokens: 0,
+    scrapingTimeMs
+  };
+
+  // Count items by type and estimate tokens
+  let totalText = '';
+  data.forEach(item => {
+    const type = item.type || 'text';
+    if (type === 'table') stats.itemsByType.table++;
+    else if (type === 'text') stats.itemsByType.text++;
+    else if (type === 'image') stats.itemsByType.image++;
+    else if (type === 'price') stats.itemsByType.price++;
+
+    // Accumulate text for token estimation
+    totalText += (item.label || '') + ' ' + item.value + '\n';
+  });
+
+  stats.estimatedTokens = estimateTokenCount(totalText);
+
+  return stats;
 }
 
 /**
@@ -174,6 +230,7 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
 export async function scrapePageWithPlaywright(url: string, options: { flatten?: boolean; format?: 'json' | 'yaml' } = {}): Promise<RawPageContent> {
   const { flatten = true, format = 'yaml' } = options;
 
+  const startTime = Date.now();
   let browser;
   try {
     // Launch headless browser (use system chromium)
@@ -237,13 +294,18 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
     // Extract raw data from the rendered HTML
     const data = extractRawDataFromHtml(html, url);
 
-    // Convert to YAML if requested
+    // Calculate statistics
+    const scrapingTimeMs = Date.now() - startTime;
+    const stats = calculateStats(data, scrapingTimeMs);
+
+    // Convert to YAML if requested (excluding stats from YAML output)
     const yaml = format === 'yaml' ? YAML.stringify(data) : undefined;
 
     return {
       url,
       title,
       data,
+      stats,
       yaml
     };
   } catch (error) {

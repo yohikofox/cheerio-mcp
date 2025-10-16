@@ -395,9 +395,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       const content = await scrapePageWithPlaywright(url, { flatten, format });
 
-      const outputText = format === 'yaml' && content.yaml
-        ? content.yaml
-        : JSON.stringify(content, null, 2);
+      // For YAML format: prepend stats as comment, then YAML data
+      // For JSON format: include stats in the JSON object
+      let outputText: string;
+      if (format === 'yaml' && content.yaml) {
+        const statsComment = `# Scraping Statistics
+# Total items: ${content.stats?.totalItems || 0}
+# - Tables/Specs: ${content.stats?.itemsByType.table || 0}
+# - Text blocks: ${content.stats?.itemsByType.text || 0}
+# - Images: ${content.stats?.itemsByType.image || 0}
+# Estimated tokens: ${content.stats?.estimatedTokens || 0}
+# Scraping time: ${content.stats?.scrapingTimeMs || 0}ms
+#
+`;
+        outputText = statsComment + content.yaml;
+      } else {
+        outputText = JSON.stringify(content, null, 2);
+      }
 
       return {
         content: [
