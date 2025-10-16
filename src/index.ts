@@ -8,6 +8,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { searchGoogle, searchDuckDuckGo, searchBing, SearchEngineResult } from './searchEngines.js';
+import { searchDuckDuckGoDynamic, searchBingDynamic } from './searchEngines-dynamic.js';
+import { searchGoogleStealth, searchGoogleAPI } from './searchEngines-google.js';
 import { scrapePage, scrapeMultiplePages, PageContent } from './scraper.js';
 import { scrapePageRaw, scrapeMultiplePagesRaw, RawPageContent } from './scraper-raw.js';
 import { scrapePageWithPlaywright, scrapeMultiplePagesWithPlaywright } from './scraper-playwright.js';
@@ -30,7 +32,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'search_web',
-        description: 'Search the web using multiple search engines (Google, DuckDuckGo, Bing) and return organic results (excluding ads). Returns up to 10 non-commercial results per engine.',
+        description: 'Search the web using multiple search engines (Google, DuckDuckGo, Bing) and return organic results (excluding ads). Fast but limited. Returns up to 10 non-commercial results per engine.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -56,6 +58,86 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['query'],
+        },
+      },
+      {
+        name: 'search_web_dynamic',
+        description: 'Search the web using headless browser (Playwright) for richer results from DuckDuckGo and Bing. Slower but more complete.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'The search query string',
+            },
+            engines: {
+              type: 'array',
+              description: 'List of search engines to use. Available: duckduckgo, bing. Default: duckduckgo',
+              items: {
+                type: 'string',
+                enum: ['duckduckgo', 'bing'],
+              },
+              default: ['duckduckgo'],
+            },
+            maxResults: {
+              type: 'number',
+              description: 'Maximum number of results per engine (1-20). Default: 10',
+              minimum: 1,
+              maximum: 20,
+              default: 10,
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'search_google_stealth',
+        description: 'Search Google using stealth mode (anti-bot bypass) with human-like behavior. Uses delays, cookie handling, and browser fingerprint masking. Slower but can bypass CAPTCHA.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'The search query string',
+            },
+            maxResults: {
+              type: 'number',
+              description: 'Maximum number of results (1-20). Default: 10',
+              minimum: 1,
+              maximum: 20,
+              default: 10,
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'search_google_api',
+        description: 'Search Google using official Custom Search API. Requires API key and Search Engine ID. No CAPTCHA, reliable, but limited to 100 free queries/day.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'The search query string',
+            },
+            apiKey: {
+              type: 'string',
+              description: 'Google Custom Search API key',
+            },
+            searchEngineId: {
+              type: 'string',
+              description: 'Google Custom Search Engine ID (CX parameter)',
+            },
+            maxResults: {
+              type: 'number',
+              description: 'Maximum number of results (1-10). Default: 10',
+              minimum: 1,
+              maximum: 10,
+              default: 10,
+            },
+          },
+          required: ['query', 'apiKey', 'searchEngineId'],
         },
       },
       {
@@ -257,6 +339,72 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           {
             type: 'text',
             text: JSON.stringify(results, null, 2),
+          },
+        ],
+      };
+    }
+
+    if (name === 'search_web_dynamic') {
+      const { query, engines = ['duckduckgo'], maxResults = 10 } = args as {
+        query: string;
+        engines?: string[];
+        maxResults?: number;
+      };
+
+      const searchPromises: Promise<SearchEngineResult>[] = [];
+
+      if (engines.includes('duckduckgo')) {
+        searchPromises.push(searchDuckDuckGoDynamic(query, maxResults));
+      }
+      if (engines.includes('bing')) {
+        searchPromises.push(searchBingDynamic(query, maxResults));
+      }
+
+      const results = await Promise.all(searchPromises);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(results, null, 2),
+          },
+        ],
+      };
+    }
+
+    if (name === 'search_google_stealth') {
+      const { query, maxResults = 10 } = args as {
+        query: string;
+        maxResults?: number;
+      };
+
+      const result = await searchGoogleStealth(query, maxResults);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify([result], null, 2),
+          },
+        ],
+      };
+    }
+
+    if (name === 'search_google_api') {
+      const { query, apiKey, searchEngineId, maxResults = 10 } = args as {
+        query: string;
+        apiKey: string;
+        searchEngineId: string;
+        maxResults?: number;
+      };
+
+      const result = await searchGoogleAPI(query, apiKey, searchEngineId, maxResults);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify([result], null, 2),
           },
         ],
       };
