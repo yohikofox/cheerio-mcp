@@ -332,3 +332,87 @@ export async function scrapeMultiplePagesWithPlaywright(urls: string[], options:
   const promises = urls.map(url => scrapePageWithPlaywright(url, options));
   return Promise.all(promises);
 }
+
+/**
+ * Take a screenshot of a webpage using Playwright
+ */
+export async function takeScreenshotWithPlaywright(
+  url: string, 
+  options: { 
+    width?: number; 
+    height?: number; 
+    fullPage?: boolean;
+    format?: 'png' | 'jpeg';
+    quality?: number;
+  } = {}
+): Promise<{ 
+  url: string; 
+  title: string; 
+  screenshot: Buffer; 
+  format: string;
+  dimensions: { width: number; height: number };
+  timestamp: string;
+}> {
+  const browser = await chromium.launch({
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+  });
+  
+  const context = await browser.newContext({
+    viewport: { 
+      width: options.width || 1920, 
+      height: options.height || 1080 
+    },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+  });
+
+  const page = await context.newPage();
+
+  try {
+    console.log(`Taking screenshot of: ${url}`);
+    
+    // Navigate to page
+    await page.goto(url, { 
+      waitUntil: 'networkidle',
+      timeout: 30000 
+    });
+
+    // Wait for page to be fully loaded
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(3000); // Wait 3 seconds for dynamic content
+
+    // Get page title
+    const title = await page.title();
+
+    // Take screenshot
+    const screenshotOptions: any = {
+      fullPage: options.fullPage || false,
+      type: options.format || 'png'
+    };
+
+    if (options.format === 'jpeg' && options.quality) {
+      screenshotOptions.quality = options.quality;
+    }
+
+    const screenshot = await page.screenshot(screenshotOptions);
+
+    // Get actual dimensions
+    const viewport = page.viewportSize();
+    const dimensions = {
+      width: viewport?.width || options.width || 1920,
+      height: viewport?.height || options.height || 1080
+    };
+
+    return {
+      url,
+      title,
+      screenshot,
+      format: options.format || 'png',
+      dimensions,
+      timestamp: new Date().toISOString()
+    };
+
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+}

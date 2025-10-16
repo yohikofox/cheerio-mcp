@@ -5,7 +5,7 @@ import {
   searchBing,
 } from "./searchEngines.js";
 import { scrapePage, scrapeMultiplePages } from "./scraper.js";
-import { scrapeMultiplePagesWithPlaywright } from "./scraper-playwright.js";
+import { scrapeMultiplePagesWithPlaywright, scrapePageWithPlaywright, takeScreenshotWithPlaywright } from "./scraper-playwright.js";
 
 const app = express();
 app.use(express.json());
@@ -159,6 +159,77 @@ app.post("/mcp", async (req, res) => {
               },
             },
             {
+              name: "scrape_dynamic",
+              description: "Extract structured data from a single page using Playwright (JavaScript-heavy sites) - Returns YAML/JSON format",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  url: {
+                    type: "string",
+                    description: "The URL of the page to scrape",
+                  },
+                  format: {
+                    type: "string",
+                    enum: ["yaml", "json"],
+                    description: "Output format",
+                    default: "yaml",
+                  },
+                  flatten: {
+                    type: "boolean",
+                    description: "Flatten the data structure",
+                    default: true,
+                  },
+                },
+                required: ["url"],
+              },
+            },
+            {
+              name: "take_screenshot",
+              description: "Take a screenshot of a webpage using Playwright - Returns base64 encoded image",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  url: {
+                    type: "string",
+                    description: "The URL of the page to screenshot",
+                  },
+                  width: {
+                    type: "number",
+                    description: "Viewport width in pixels",
+                    default: 1920,
+                    minimum: 320,
+                    maximum: 3840,
+                  },
+                  height: {
+                    type: "number",
+                    description: "Viewport height in pixels",
+                    default: 1080,
+                    minimum: 240,
+                    maximum: 2160,
+                  },
+                  fullPage: {
+                    type: "boolean",
+                    description: "Capture full page (scroll to bottom)",
+                    default: false,
+                  },
+                  format: {
+                    type: "string",
+                    enum: ["png", "jpeg"],
+                    description: "Image format",
+                    default: "png",
+                  },
+                  quality: {
+                    type: "number",
+                    description: "JPEG quality (0-100, only for JPEG format)",
+                    default: 90,
+                    minimum: 0,
+                    maximum: 100,
+                  },
+                },
+                required: ["url"],
+              },
+            },
+            {
               name: "search_and_scrape_dynamic",
               description: "Search and scrape with Playwright (JavaScript-heavy sites) - Returns YAML format with product data",
               inputSchema: {
@@ -304,6 +375,92 @@ app.post("/mcp", async (req, res) => {
                 {
                   type: "text",
                   text: JSON.stringify(pagesData, null, 2),
+                },
+              ],
+            };
+            break;
+          }
+
+          case "scrape_dynamic": {
+            const { url, format = "yaml", flatten = true } = args || {};
+
+            if (!url) {
+              return res.json({
+                jsonrpc: "2.0",
+                id,
+                error: {
+                  code: -32602,
+                  message: "Invalid params: 'url' is required",
+                },
+              });
+            }
+
+            const pageData = await scrapePageWithPlaywright(url, { format: format as 'yaml' | 'json', flatten });
+            
+            // Return YAML string if format is yaml, otherwise return JSON
+            if (format === 'yaml') {
+              const yamlOutput = `---\nurl: ${pageData.url}\ntitle: ${pageData.title}\n${pageData.yaml || ''}`;
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: yamlOutput,
+                  },
+                ],
+              };
+            } else {
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(pageData, null, 2),
+                  },
+                ],
+              };
+            }
+            break;
+          }
+
+          case "take_screenshot": {
+            const { url, width = 1920, height = 1080, fullPage = false, format = "png", quality = 90 } = args || {};
+
+            if (!url) {
+              return res.json({
+                jsonrpc: "2.0",
+                id,
+                error: {
+                  code: -32602,
+                  message: "Invalid params: 'url' is required",
+                },
+              });
+            }
+
+            const screenshotData = await takeScreenshotWithPlaywright(url, {
+              width,
+              height,
+              fullPage,
+              format: format as 'png' | 'jpeg',
+              quality: format === 'jpeg' ? quality : undefined
+            });
+
+            // Convert buffer to base64
+            const base64Image = screenshotData.screenshot.toString('base64');
+            
+            toolResult = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    url: screenshotData.url,
+                    title: screenshotData.title,
+                    image: {
+                      format: screenshotData.format,
+                      base64: base64Image,
+                      size: screenshotData.screenshot.length
+                    },
+                    dimensions: screenshotData.dimensions,
+                    timestamp: screenshotData.timestamp
+                  }, null, 2),
                 },
               ],
             };
