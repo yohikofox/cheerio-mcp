@@ -5,6 +5,7 @@ import {
   searchBing,
 } from "./searchEngines.js";
 import { scrapePage, scrapeMultiplePages } from "./scraper.js";
+import { scrapeMultiplePagesWithPlaywright } from "./scraper-playwright.js";
 
 const app = express();
 app.use(express.json());
@@ -152,6 +153,39 @@ app.post("/mcp", async (req, res) => {
                     default: 5,
                     minimum: 1,
                     maximum: 10,
+                  },
+                },
+                required: ["query"],
+              },
+            },
+            {
+              name: "search_and_scrape_dynamic",
+              description: "Search and scrape with Playwright (JavaScript-heavy sites) - Returns YAML format with product data",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  query: {
+                    type: "string",
+                    description: "The search query",
+                  },
+                  engine: {
+                    type: "string",
+                    enum: ["google", "duckduckgo", "bing"],
+                    description: "Search engine to use",
+                    default: "duckduckgo",
+                  },
+                  maxResults: {
+                    type: "number",
+                    description: "Maximum number of results to scrape (1-10)",
+                    default: 3,
+                    minimum: 1,
+                    maximum: 10,
+                  },
+                  format: {
+                    type: "string",
+                    enum: ["yaml", "json"],
+                    description: "Output format",
+                    default: "yaml",
                   },
                 },
                 required: ["query"],
@@ -323,6 +357,69 @@ app.post("/mcp", async (req, res) => {
                 },
               ],
             };
+            break;
+          }
+
+          case "search_and_scrape_dynamic": {
+            const { query, engine = "duckduckgo", maxResults = 3, format = "yaml" } = args || {};
+
+            if (!query) {
+              return res.json({
+                jsonrpc: "2.0",
+                id,
+                error: {
+                  code: -32602,
+                  message: "Invalid params: 'query' is required",
+                },
+              });
+            }
+
+            let searchResults;
+            switch (engine.toLowerCase()) {
+              case "google":
+                searchResults = await searchGoogle(query, maxResults);
+                break;
+              case "duckduckgo":
+                searchResults = await searchDuckDuckGo(query, maxResults);
+                break;
+              case "bing":
+                searchResults = await searchBing(query, maxResults);
+                break;
+              default:
+                return res.json({
+                  jsonrpc: "2.0",
+                  id,
+                  error: {
+                    code: -32602,
+                    message: `Invalid engine: ${engine}`,
+                  },
+                });
+            }
+
+            const urls = searchResults.results.map((r) => r.url);
+            const scrapedPages = await scrapeMultiplePagesWithPlaywright(urls, { format: format as 'yaml' | 'json' });
+
+            // Return YAML string if format is yaml, otherwise return JSON
+            if (format === 'yaml') {
+              const yamlOutput = scrapedPages.map(c => `---\nurl: ${c.url}\ntitle: ${c.title}\n${c.yaml || ''}`).join('\n\n');
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: yamlOutput,
+                  },
+                ],
+              };
+            } else {
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify({ searchResults, scrapedPages }, null, 2),
+                  },
+                ],
+              };
+            }
             break;
           }
 
