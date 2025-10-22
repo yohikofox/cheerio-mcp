@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "CreateArticleRequest",
+  "required": ["sku", "shelf"],
+  "properties": {
+    "sku": {
+      "type": "string",
+      "description": "SKU unique de l'article",
+      "example": "ART-123456"
+    },
+    "shelf": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID du rayon (shelf)",
+      "example": "550e8400-e29b-41d4-a716-446655440000"
+    },
+    "label": {
+      "type": "string",
+      "description": "Libellé de l'article",
+      "example": "iPhone 12 Pro 128GB"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description détaillée de l'article",
+      "example": "Smartphone Apple iPhone 12 Pro en excellent état"
+    },
+    "brand": {
+      "type": "string",
+      "description": "Marque du produit",
+      "example": "Apple"
+    },
+    "model": {
+      "type": "string",
+      "description": "Modèle du produit",
+      "example": "iPhone 12 Pro"
+    },
+    "ean": {
+      "type": "string",
+      "description": "Code EAN du produit",
+      "example": "0190199566034"
+    },
+    "barcode1": {
+      "type": "string",
+      "description": "Code barre interne",
+      "example": "BARCODE123"
+    },
+    "asin": {
+      "type": "string",
+      "description": "ASIN Amazon",
+      "example": "B08L5TNJHG"
+    },
+    "attributes": {
+      "type": "object",
+      "description": "Attributs additionnels de l'article",
+      "properties": {
+        "ean": {
+          "type": "string",
+          "example": "0190199566034"
+        },
+        "comment": {
+          "type": "string",
+          "example": "Article en très bon état"
+        },
+        "dr_model": {
+          "type": "string",
+          "example": "A2407"
+        },
+        "image_1": {
+          "type": "string",
+          "description": "Chemin ou URL de l'image principale",
+          "example": "/path/to/image1.jpg"
+        },
+        "image_2": {
+          "type": "string",
+          "description": "Chemin ou URL de l'image secondaire",
+          "example": "/path/to/image2.jpg"
+        },
+        "label_wizaplace": {
+          "type": "string",
+          "example": "iPhone 12 Pro 128GB Graphite"
+        },
+        "metal": {
+          "type": "string",
+          "example": "Non"
+        },
+        "recommanded_retail_price": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]{2}$",
+          "example": "1159.00"
+        },
+        "reference": {
+          "type": "string",
+          "example": "MGMN3F/A"
+        },
+        "sale_price_ht": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]{2}$",
+          "example": "649.17"
+        },
+        "sale_price_ttc": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]{2}$",
+          "example": "779.00"
+        },
+        "short_description": {
+          "type": "string",
+          "example": "Smartphone 5G avec écran Super Retina XDR"
+        },
+        "unit_price_ht": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]{2}$",
+          "example": "649.17"
+        },
+        "weight": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]{2}$",
+          "example": "189.00"
+        },
+        "colour": {
+          "type": "string",
+          "example": "Graphite"
+        },
+        "width": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]{2}$",
+          "example": "71.50"
+        },
+        "depth": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]{2}$",
+          "example": "7.40"
+        },
+        "height": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]{2}$",
+          "example": "146.70"
+        },
+        "author": {
+          "type": "string"
+        },
+        "edition": {
+          "type": "string"
+        },
+        "year": {
+          "type": "string",
+          "example": "2020"
+        },
+        "processor": {
+          "type": "string",
+          "example": "Apple A14 Bionic"
+        },
+        "ram": {
+          "type": "string",
+          "example": "6"
+        },
+        "capacity": {
+          "type": "string",
+          "example": "128"
+        },
+        "book_categoryed": {
+          "type": "string"
+        },
+        "screen_dimension": {
+          "type": "string",
+          "example": "6.1"
+        },
+        "resolution": {
+          "type": "string",
+          "example": "2532x1170"
+        },
+        "megapixels": {
+          "type": "string",
+          "example": "12"
+        },
+        "memory": {
+          "type": "string",
+          "example": "128"
+        },
+        "network": {
+          "type": "string",
+          "example": "5G"
+        },
+        "power": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

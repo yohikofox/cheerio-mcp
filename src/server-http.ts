@@ -1,4 +1,6 @@
 import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 import {
   searchGoogle,
   searchDuckDuckGo,
@@ -6,8 +8,12 @@ import {
 } from "./searchEngines.js";
 import { scrapeMultiplePagesWithPlaywright, scrapePageWithPlaywright, takeScreenshotWithPlaywright } from "./scraper-playwright.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '../public')));
 
 const PORT = process.env.PORT || 3000;
 
@@ -387,13 +393,13 @@ app.post("/mcp", async (req, res) => {
               let searchResult;
               switch (engine.toLowerCase()) {
                 case "google":
-                  searchResult = await searchGoogle(query, maxResults);
+                  searchResult = await searchGoogle(query, maxResults, allowedDomains);
                   break;
                 case "duckduckgo":
-                  searchResult = await searchDuckDuckGo(query, maxResults);
+                  searchResult = await searchDuckDuckGo(query, maxResults, allowedDomains);
                   break;
                 case "bing":
-                  searchResult = await searchBing(query, maxResults);
+                  searchResult = await searchBing(query, maxResults, allowedDomains);
                   break;
                 default:
                   continue;
@@ -401,14 +407,11 @@ app.post("/mcp", async (req, res) => {
               if (searchResult) results.push(searchResult);
             }
 
-            // Apply domain filtering if allowedDomains is provided
-            const filteredResults = filterResultsByDomain(results, allowedDomains);
-
             toolResult = {
               content: [
                 {
                   type: "text",
-                  text: JSON.stringify(filteredResults, null, 2),
+                  text: JSON.stringify(results, null, 2),
                 },
               ],
             };

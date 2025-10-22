@@ -2,6 +2,14 @@ import * as cheerio from 'cheerio';
 import YAML from 'yaml';
 import { chromium } from 'playwright-core';
 
+/**
+ * Log with timestamp for temporal tracking
+ */
+function logWithTime(message: string, ...args: any[]): void {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${message}`, ...args);
+}
+
 export interface RawDataItem {
   label?: string;
   value: string;
@@ -271,11 +279,11 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
   try {
     // Launch browser with anti-detection techniques
     const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== 'false';
-    console.log(`Launching browser in ${isHeadless ? 'HEADLESS' : 'HEADED'} mode with stealth techniques`);
+    logWithTime(`Launching browser in ${isHeadless ? 'HEADLESS' : 'HEADED'} mode with stealth techniques`);
     
     browser = await chromium.launch({
       headless: isHeadless,
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -299,6 +307,7 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
         '--disable-extensions-http-throttling'
       ]
     });
+    logWithTime('Browser launched successfully');
 
     const context = await browser.newContext({
       // Randomized realistic user agent
@@ -378,7 +387,7 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
     });
 
     // Navigate with intelligent waiting
-    console.log('Navigating to page with anti-detection...');
+    logWithTime('Navigating to page with anti-detection...');
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     
     // Wait for multiple load states intelligently
@@ -416,21 +425,21 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
       };
     });
     
-    console.log('JavaScript check:', jsCheck);
+    logWithTime('JavaScript check:', jsCheck);
 
     // Wait for initial page load and dynamic content
     await page.waitForTimeout(5000); // Initial wait
     
     // Wait additional time for post-TTFB resources as observed in waterfall
-    console.log('Waiting additional 10s for post-TTFB resources to load...');
+    logWithTime('Waiting additional 10s for post-TTFB resources to load...');
     await page.waitForTimeout(10000); // Additional 10s wait for waterfall resources
     
     // Wait for network to be completely idle again after the additional resources
     try {
       await page.waitForLoadState('networkidle', { timeout: 15000 });
-      console.log('Network idle achieved after additional wait');
+      logWithTime('Network idle achieved after additional wait');
     } catch (err) {
-      console.log('Network still active after additional wait, proceeding anyway');
+      logWithTime('Network still active after additional wait, proceeding anyway');
     }
 
     // Wait for potential dynamic content to load
@@ -440,13 +449,13 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
         const specs = document.querySelectorAll('[class*="spec"], [class*="fiche"], [class*="characteristic"], [class*="detail"]');
         return specs.length > 0;
       }, { timeout: 10000 });
-      console.log('Specification elements found');
+      logWithTime('Specification elements found');
     } catch (err) {
-      console.log('No specification elements found within timeout');
+      logWithTime('No specification elements found within timeout');
     }
 
     // Human-like progressive scrolling with mouse simulation
-    console.log('Starting human-like scrolling and interactions...');
+    logWithTime('Starting human-like scrolling and interactions...');
     
     // Get page dimensions first
     const pageInfo = await page.evaluate(() => ({
@@ -454,7 +463,7 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
       viewportHeight: window.innerHeight
     }));
     
-    console.log(`Page height: ${pageInfo.height}, Viewport: ${pageInfo.viewportHeight}`);
+    logWithTime(`Page height: ${pageInfo.height}, Viewport: ${pageInfo.viewportHeight}`);
     
     // Simulate human mouse movement and scrolling
     const scrollStep = 300;
@@ -484,7 +493,7 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
       const newHeight = await page.evaluate(() => document.body.scrollHeight);
       if (newHeight > pageInfo.height) {
         pageInfo.height = newHeight;
-        console.log(`Content expanded to ${newHeight}px`);
+        logWithTime(`Content expanded to ${newHeight}px`);
       }
     }
     
@@ -497,7 +506,7 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
     });
     
     await page.waitForTimeout(1000);
-    console.log('Human-like scrolling completed');
+    logWithTime('Human-like scrolling completed');
 
     // Wait a bit more
     await page.waitForTimeout(1000);
@@ -537,7 +546,7 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
       // Wait for any newly loaded content
       await page.waitForTimeout(2000);
     } catch (err) {
-      console.log('Could not expand sections:', err instanceof Error ? err.message : String(err));
+      logWithTime('Could not expand sections:', err instanceof Error ? err.message : String(err));
     }
 
     // Take a screenshot for debugging (optional)
@@ -546,11 +555,11 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
         path: `debug-${Date.now()}.png`, 
         fullPage: true 
       });
-      console.log('Debug screenshot saved');
+      logWithTime('Debug screenshot saved');
     }
 
     // Log network responses captured
-    console.log(`Captured ${responses.length} API/JSON responses during page load`);
+    logWithTime(`Captured ${responses.length} API/JSON responses during page load`);
     
     // Final page state check
     const finalState = await page.evaluate(() => ({
@@ -560,10 +569,18 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
       title: document.title
     }));
     
-    console.log('Final page state:', finalState);
+    logWithTime('Final page state:', finalState);
 
     // Get the fully rendered HTML
     const html = await page.content();
+
+    // Save HTML for debugging
+    const fs = await import('fs');
+    const path = await import('path');
+    const urlHash = Buffer.from(url).toString('base64').replace(/[/+=]/g, '_').substring(0, 50);
+    const htmlPath = path.join(process.cwd(), 'log', `scraped-${urlHash}.html`);
+    await fs.promises.writeFile(htmlPath, html, 'utf-8');
+    logWithTime(`HTML saved to: ${htmlPath}`);
 
     // Close browser
     await browser.close();
@@ -650,7 +667,7 @@ export async function takeScreenshotWithPlaywright(
   const page = await context.newPage();
 
   try {
-    console.log(`Taking screenshot of: ${url}`);
+    logWithTime(`Taking screenshot of: ${url}`);
     
     // Navigate to page
     await page.goto(url, { 

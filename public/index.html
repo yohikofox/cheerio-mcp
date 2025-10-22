@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Cheerio - Client de test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-bottom: 2px solid #ddd;
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 15px 25px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .tab:hover {
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .tool-panel {
+            display: none;
+        }
+
+        .tool-panel.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: monospace;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result-container {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .result-container h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #c33;
+        }
+
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #3c3;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .helper-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        .screenshot-preview {
+            max-width: 100%;
+            margin-top: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .tool-description {
+            background: #f0f4ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .tool-description p {
+            color: #555;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MCP Cheerio Client</h1>
+            <p>Interface de test pour les outils de recherche et scraping web</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" data-tool="search_web">Search Web</button>
+            <button class="tab" data-tool="scrape_page">Scrape Page</button>
+            <button class="tab" data-tool="scrape_multiple">Scrape Multiple</button>
+            <button class="tab" data-tool="search_and_scrape">Search & Scrape</button>
+            <button class="tab" data-tool="scrape_dynamic">Scrape Dynamic</button>
+            <button class="tab" data-tool="screenshot">Screenshot</button>
+            <button class="tab" data-tool="search_scrape_dynamic">Search & Scrape Dynamic</button>
+        </div>
+
+        <div class="content">
+            <!-- Search Web Tool -->
+            <div class="tool-panel active" id="search_web">
+                <div class="tool-description">
+                    <p>Recherchez sur le web en utilisant plusieurs moteurs de recherche (Google, DuckDuckGo, Bing). Possibilité de filtrer par domaines.</p>
+                </div>
+                <form id="form_search_web">
+                    <div class="form-group">
+                        <label for="search_query">Requête de recherche *</label>
+                        <input type="text" id="search_query" required placeholder="Ex: iPhone 17 Pro Max 1To">
+                    </div>
+                    <div class="form-group">
+                        <label>Moteurs de recherche</label>
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="engine_google" value="google">
+                                <label for="engine_google">Google</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="engine_duckduckgo" value="duckduckgo" checked>
+                                <label for="engine_duckduckgo">DuckDuckGo</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="engine_bing" value="bing">
+                                <label for="engine_bing">Bing</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="search_maxResults">Nombre max de résultats (1-10)</label>
+                        <input type="number" id="search_maxResults" min="1" max="10" value="10">
+                    </div>
+                    <div class="form-group">
+                        <label for="search_domains">Domaines autorisés (optionnel)</label>
+                        <input type="text" id="search_domains" placeholder="fnac.com, cdiscount.com, darty.com">
+                        <div class="helper-text">Séparez les domaines par des virgules</div>
+                    </div>
+                    <button type="submit">Rechercher</button>
+                </form>
+                <div id="result_search_web"></div>
+            </div>
+
+            <!-- Scrape Page Tool -->
+            <div class="tool-panel" id="scrape_page">
+                <div class="tool-description">
+                    <p>Extrait les données structurées d'une page web en utilisant Playwright (supporte JavaScript).</p>
+                </div>
+                <form id="form_scrape_page">
+                    <div class="form-group">
+                        <label for="scrape_url">URL de la page *</label>
+                        <input type="text" id="scrape_url" required placeholder="https://example.com/product">
+                    </div>
+                    <div class="form-group">
+                        <label for="scrape_format">Format de sortie</label>
+                        <select id="scrape_format">
+                            <option value="yaml">YAML</option>
+                            <option value="json">JSON</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="scrape_flatten" checked>
+                            Aplatir la structure de données
+                        </label>
+                    </div>
+                    <button type="submit">Scraper</button>
+                </form>
+                <div id="result_scrape_page"></div>
+            </div>
+
+            <!-- Scrape Multiple Pages Tool -->
+            <div class="tool-panel" id="scrape_multiple">
+                <div class="tool-description">
+                    <p>Extrait les données de plusieurs pages web en parallèle.</p>
+                </div>
+                <form id="form_scrape_multiple">
+                    <div class="form-group">
+                        <label for="scrape_urls">URLs (une par ligne) *</label>
+                        <textarea id="scrape_urls" required placeholder="https://example.com/page1&#10;https://example.com/page2&#10;https://example.com/page3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="scrape_multiple_format">Format de sortie</label>
+                        <select id="scrape_multiple_format">
+                            <option value="yaml">YAML</option>
+                            <option value="json">JSON</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="scrape_multiple_flatten" checked>
+                            Aplatir la structure de données
+                        </label>
+                    </div>
+                    <button type="submit">Scraper</button>
+                </form>
+                <div id="result_scrape_multiple"></div>
+            </div>
+
+            <!-- Search and Scrape Tool -->
+            <div class="tool-panel" id="search_and_scrape">
+                <div class="tool-description">
+                    <p>Effectue une recherche et scrape automatiquement le contenu des meilleurs résultats.</p>
+                </div>
+                <form id="form_search_and_scrape">
+                    <div class="form-group">
+                        <label for="sns_query">Requête de recherche *</label>
+                        <input type="text" id="sns_query" required placeholder="Ex: iPhone 17 Pro Max">
+                    </div>
+                    <div class="form-group">
+                        <label for="sns_engine">Moteur de recherche</label>
+                        <select id="sns_engine">
+                            <option value="duckduckgo">DuckDuckGo</option>
+                            <option value="google">Google</option>
+                            <option value="bing">Bing</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sns_maxResults">Nombre max de résultats (1-10)</label>
+                        <input type="number" id="sns_maxResults" min="1" max="10" value="5">
+                    </div>
+                    <div class="form-group">
+                        <label for="sns_format">Format de sortie</label>
+                        <select id="sns_format">
+                            <option value="yaml">YAML</option>
+                            <option value="json">JSON</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sns_domains">Domaines autorisés (optionnel)</label>
+                        <input type="text" id="sns_domains" placeholder="fnac.com, cdiscount.com">
+                    </div>
+                    <button type="submit">Rechercher et Scraper</button>
+                </form>
+                <div id="result_search_and_scrape"></div>
+            </div>
+
+            <!-- Scrape Dynamic Tool -->
+            <div class="tool-panel" id="scrape_dynamic">
+                <div class="tool-description">
+                    <p>Extrait les données d'une page avec contenu JavaScript dynamique.</p>
+                </div>
+                <form id="form_scrape_dynamic">
+                    <div class="form-group">
+                        <label for="dynamic_url">URL de la page *</label>
+                        <input type="text" id="dynamic_url" required placeholder="https://example.com/dynamic-page">
+                    </div>
+                    <div class="form-group">
+                        <label for="dynamic_format">Format de sortie</label>
+                        <select id="dynamic_format">
+                            <option value="yaml">YAML</option>
+                            <option value="json">JSON</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="dynamic_flatten" checked>
+                            Aplatir la structure de données
+                        </label>
+                    </div>
+                    <button type="submit">Scraper</button>
+                </form>
+                <div id="result_scrape_dynamic"></div>
+            </div>
+
+            <!-- Screenshot Tool -->
+            <div class="tool-panel" id="screenshot">
+                <div class="tool-description">
+                    <p>Capture une capture d'écran d'une page web avec Playwright.</p>
+                </div>
+                <form id="form_screenshot">
+                    <div class="form-group">
+                        <label for="screenshot_url">URL de la page *</label>
+                        <input type="text" id="screenshot_url" required placeholder="https://example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="screenshot_width">Largeur (px)</label>
+                        <input type="number" id="screenshot_width" min="320" max="3840" value="1920">
+                    </div>
+                    <div class="form-group">
+                        <label for="screenshot_height">Hauteur (px)</label>
+                        <input type="number" id="screenshot_height" min="240" max="2160" value="1080">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="screenshot_fullPage">
+                            Capturer toute la page (scroll)
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="screenshot_format">Format</label>
+                        <select id="screenshot_format">
+                            <option value="png">PNG</option>
+                            <option value="jpeg">JPEG</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="screenshot_quality">Qualité JPEG (0-100)</label>
+                        <input type="number" id="screenshot_quality" min="0" max="100" value="90">
+                    </div>
+                    <button type="submit">Capturer</button>
+                </form>
+                <div id="result_screenshot"></div>
+            </div>
+
+            <!-- Search and Scrape Dynamic Tool -->
+            <div class="tool-panel" id="search_scrape_dynamic">
+                <div class="tool-description">
+                    <p>Recherche et scrape des sites avec contenu JavaScript dynamique.</p>
+                </div>
+                <form id="form_search_scrape_dynamic">
+                    <div class="form-group">
+                        <label for="snsd_query">Requête de recherche *</label>
+                        <input type="text" id="snsd_query" required placeholder="Ex: iPhone 17 Pro Max">
+                    </div>
+                    <div class="form-group">
+                        <label for="snsd_engine">Moteur de recherche</label>
+                        <select id="snsd_engine">
+                            <option value="duckduckgo">DuckDuckGo</option>
+                            <option value="google">Google</option>
+                            <option value="bing">Bing</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="snsd_maxResults">Nombre max de résultats (1-10)</label>
+                        <input type="number" id="snsd_maxResults" min="1" max="10" value="3">
+                    </div>
+                    <div class="form-group">
+                        <label for="snsd_format">Format de sortie</label>
+                        <select id="snsd_format">
+                            <option value="yaml">YAML</option>
+                            <option value="json">JSON</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="snsd_domains">Domaines autorisés (optionnel)</label>
+                        <input type="text" id="snsd_domains" placeholder="fnac.com, cdiscount.com">
+                    </div>
+                    <button type="submit">Rechercher et Scraper</button>
+                </form>
+                <div id="result_search_scrape_dynamic"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const MCP_ENDPOINT = '/mcp';
+        let requestId = 1;
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const toolName = tab.dataset.tool;
+
+                // Update tabs
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Update panels
+                document.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
+                document.getElementById(toolName).classList.add('active');
+            });
+        });
+
+        // Generic MCP request function
+        async function mcpRequest(method, params) {
+            const response = await fetch(MCP_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: requestId++,
+                    method,
+                    params
+                })
+            });
+
+            return await response.json();
+        }
+
+        // Display result function
+        function displayResult(resultId, data, isError = false) {
+            const container = document.getElementById(resultId);
+            container.innerHTML = '';
+
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'result-container';
+
+            if (isError) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <strong>Erreur:</strong> ${data}
+                    </div>
+                `;
+            } else {
+                let content = data;
+
+                // Handle special case for screenshot
+                if (resultId === 'result_screenshot' && data.image) {
+                    const img = document.createElement('img');
+                    img.src = `data:image/${data.image.format};base64,${data.image.base64}`;
+                    img.className = 'screenshot-preview';
+                    resultDiv.innerHTML = `
+                        <h3>Résultat</h3>
+                        <p><strong>URL:</strong> ${data.url}</p>
+                        <p><strong>Titre:</strong> ${data.title}</p>
+                        <p><strong>Dimensions:</strong> ${data.dimensions.width}x${data.dimensions.height}</p>
+                        <p><strong>Taille:</strong> ${(data.image.size / 1024).toFixed(2)} KB</p>
+                    `;
+                    resultDiv.appendChild(img);
+                } else {
+                    resultDiv.innerHTML = `
+                        <h3>Résultat</h3>
+                        <pre>${typeof content === 'string' ? content : JSON.stringify(content, null, 2)}</pre>
+                    `;
+                }
+            }
+
+            container.appendChild(resultDiv);
+        }
+
+        // Show loading state
+        function showLoading(button) {
+            button.disabled = true;
+            const loadingSpan = document.createElement('span');
+            loadingSpan.className = 'loading';
+            button.appendChild(loadingSpan);
+        }
+
+        // Hide loading state
+        function hideLoading(button) {
+            button.disabled = false;
+            const loading = button.querySelector('.loading');
+            if (loading) loading.remove();
+        }
+
+        // Search Web
+        document.getElementById('form_search_web').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const button = e.target.querySelector('button');
+            showLoading(button);
+
+            try {
+                const engines = [];
+                if (document.getElementById('engine_google').checked) engines.push('google');
+                if (document.getElementById('engine_duckduckgo').checked) engines.push('duckduckgo');
+                if (document.getElementById('engine_bing').checked) engines.push('bing');
+
+                const domainsInput = document.getElementById('search_domains').value.trim();
+                const allowedDomains = domainsInput ? domainsInput.split(',').map(d => d.trim()) : undefined;
+
+                const result = await mcpRequest('tools/call', {
+                    name: 'search_web',
+                    arguments: {
+                        query: document.getElementById('search_query').value,
+                        engines: engines,
+                        maxResults: parseInt(document.getElementById('search_maxResults').value),
+                        allowedDomains: allowedDomains
+                    }
+                });
+
+                if (result.error) {
+                    displayResult('result_search_web', result.error.message, true);
+                } else {
+                    displayResult('result_search_web', result.result.content[0].text);
+                }
+            } catch (error) {
+                displayResult('result_search_web', error.message, true);
+            } finally {
+                hideLoading(button);
+            }
+        });
+
+        // Scrape Page
+        document.getElementById('form_scrape_page').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const button = e.target.querySelector('button');
+            showLoading(button);
+
+            try {
+                const result = await mcpRequest('tools/call', {
+                    name: 'scrape_page',
+                    arguments: {
+                        url: document.getElementById('scrape_url').value,
+                        format: document.getElementById('scrape_format').value,
+                        flatten: document.getElementById('scrape_flatten').checked
+                    }
+                });
+
+                if (result.error) {
+                    displayResult('result_scrape_page', result.error.message, true);
+                } else {
+                    displayResult('result_scrape_page', result.result.content[0].text);
+                }
+            } catch (error) {
+                displayResult('result_scrape_page', error.message, true);
+            } finally {
+                hideLoading(button);
+            }
+        });
+
+        // Scrape Multiple Pages
+        document.getElementById('form_scrape_multiple').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const button = e.target.querySelector('button');
+            showLoading(button);
+
+            try {
+                const urls = document.getElementById('scrape_urls').value
+                    .split('\n')
+                    .map(u => u.trim())
+                    .filter(u => u.length > 0);
+
+                const result = await mcpRequest('tools/call', {
+                    name: 'scrape_multiple_pages',
+                    arguments: {
+                        urls: urls,
+                        format: document.getElementById('scrape_multiple_format').value,
+                        flatten: document.getElementById('scrape_multiple_flatten').checked
+                    }
+                });
+
+                if (result.error) {
+                    displayResult('result_scrape_multiple', result.error.message, true);
+                } else {
+                    displayResult('result_scrape_multiple', result.result.content[0].text);
+                }
+            } catch (error) {
+                displayResult('result_scrape_multiple', error.message, true);
+            } finally {
+                hideLoading(button);
+            }
+        });
+
+        // Search and Scrape
+        document.getElementById('form_search_and_scrape').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const button = e.target.querySelector('button');
+            showLoading(button);
+
+            try {
+                const domainsInput = document.getElementById('sns_domains').value.trim();
+                const allowedDomains = domainsInput ? domainsInput.split(',').map(d => d.trim()) : undefined;
+
+                const result = await mcpRequest('tools/call', {
+                    name: 'search_and_scrape',
+                    arguments: {
+                        query: document.getElementById('sns_query').value,
+                        engine: document.getElementById('sns_engine').value,
+                        maxResults: parseInt(document.getElementById('sns_maxResults').value),
+                        format: document.getElementById('sns_format').value,
+                        allowedDomains: allowedDomains
+                    }
+                });
+
+                if (result.error) {
+                    displayResult('result_search_and_scrape', result.error.message, true);
+                } else {
+                    displayResult('result_search_and_scrape', result.result.content[0].text);
+                }
+            } catch (error) {
+                displayResult('result_search_and_scrape', error.message, true);
+            } finally {
+                hideLoading(button);
+            }
+        });
+
+        // Scrape Dynamic
+        document.getElementById('form_scrape_dynamic').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const button = e.target.querySelector('button');
+            showLoading(button);
+
+            try {
+                const result = await mcpRequest('tools/call', {
+                    name: 'scrape_dynamic',
+                    arguments: {
+                        url: document.getElementById('dynamic_url').value,
+                        format: document.getElementById('dynamic_format').value,
+                        flatten: document.getElementById('dynamic_flatten').checked
+                    }
+                });
+
+                if (result.error) {
+                    displayResult('result_scrape_dynamic', result.error.message, true);
+                } else {
+                    displayResult('result_scrape_dynamic', result.result.content[0].text);
+                }
+            } catch (error) {
+                displayResult('result_scrape_dynamic', error.message, true);
+            } finally {
+                hideLoading(button);
+            }
+        });
+
+        // Screenshot
+        document.getElementById('form_screenshot').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const button = e.target.querySelector('button');
+            showLoading(button);
+
+            try {
+                const result = await mcpRequest('tools/call', {
+                    name: 'take_screenshot',
+                    arguments: {
+                        url: document.getElementById('screenshot_url').value,
+                        width: parseInt(document.getElementById('screenshot_width').value),
+                        height: parseInt(document.getElementById('screenshot_height').value),
+                        fullPage: document.getElementById('screenshot_fullPage').checked,
+                        format: document.getElementById('screenshot_format').value,
+                        quality: parseInt(document.getElementById('screenshot_quality').value)
+                    }
+                });
+
+                if (result.error) {
+                    displayResult('result_screenshot', result.error.message, true);
+                } else {
+                    const data = JSON.parse(result.result.content[0].text);
+                    displayResult('result_screenshot', data);
+                }
+            } catch (error) {
+                displayResult('result_screenshot', error.message, true);
+            } finally {
+                hideLoading(button);
+            }
+        });
+
+        // Search and Scrape Dynamic
+        document.getElementById('form_search_scrape_dynamic').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const button = e.target.querySelector('button');
+            showLoading(button);
+
+            try {
+                const domainsInput = document.getElementById('snsd_domains').value.trim();
+                const allowedDomains = domainsInput ? domainsInput.split(',').map(d => d.trim()) : undefined;
+
+                const result = await mcpRequest('tools/call', {
+                    name: 'search_and_scrape_dynamic',
+                    arguments: {
+                        query: document.getElementById('snsd_query').value,
+                        engine: document.getElementById('snsd_engine').value,
+                        maxResults: parseInt(document.getElementById('snsd_maxResults').value),
+                        format: document.getElementById('snsd_format').value,
+                        allowedDomains: allowedDomains
+                    }
+                });
+
+                if (result.error) {
+                    displayResult('result_search_scrape_dynamic', result.error.message, true);
+                } else {
+                    displayResult('result_search_scrape_dynamic', result.result.content[0].text);
+                }
+            } catch (error) {
+                displayResult('result_search_scrape_dynamic', error.message, true);
+            } finally {
+                hideLoading(button);
+            }
+        });
+    </script>
+</body>
+</html>

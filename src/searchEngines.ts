@@ -20,7 +20,8 @@ export interface SearchEngineResult {
  */
 export async function searchGoogle(
   query: string,
-  maxResults: number = 10
+  maxResults: number = 10,
+  allowedDomains?: string[]
 ): Promise<SearchEngineResult> {
   try {
     const encodedQuery = encodeURIComponent(query);
@@ -51,8 +52,8 @@ export async function searchGoogle(
     console.error(`Found ${gElements.length} elements with class ".g"`);
 
     // Google organic results selector (excludes ads)
-    $(".g").each((index, element) => {
-      if (index >= maxResults) return false;
+    $(".g").each((_index, element) => {
+      if (results.length >= maxResults) return false;
 
       const $element = $(element);
 
@@ -64,6 +65,9 @@ export async function searchGoogle(
 
       // Skip non-http links and Google internal links
       if (!url || !url.startsWith("http") || url.includes("google.com")) return;
+
+      // Check if URL matches allowed domains
+      if (!matchesAllowedDomains(url, allowedDomains)) return;
 
       const title = $link.find("h3").text().trim();
       const snippet = $element.find(".VwiC3b, .yXK7lf").text().trim();
@@ -99,11 +103,33 @@ export async function searchGoogle(
 }
 
 /**
+ * Check if URL matches allowed domains
+ */
+function matchesAllowedDomains(url: string, allowedDomains?: string[]): boolean {
+  if (!allowedDomains || allowedDomains.length === 0) {
+    return true;
+  }
+
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname.replace('www.', '').toLowerCase();
+
+    return allowedDomains.some(domain => {
+      const cleanDomain = domain.replace('www.', '').toLowerCase();
+      return hostname.includes(cleanDomain) || hostname.endsWith(cleanDomain);
+    });
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
  * Search on DuckDuckGo and extract organic results
  */
 export async function searchDuckDuckGo(
   query: string,
-  maxResults: number = 10
+  maxResults: number = 10,
+  allowedDomains?: string[]
 ): Promise<SearchEngineResult> {
   try {
     const encodedQuery = encodeURIComponent(query);
@@ -134,7 +160,7 @@ export async function searchDuckDuckGo(
 
     // DuckDuckGo results selector (excludes ads)
     $(".result").each((index, element) => {
-      if (index >= maxResults) return false;
+      if (results.length >= maxResults) return false;
 
       const $element = $(element);
 
@@ -169,6 +195,12 @@ export async function searchDuckDuckGo(
           }
         }
 
+        // Check if URL matches allowed domains
+        if (!matchesAllowedDomains(fullUrl, allowedDomains)) {
+          console.error(`Skipping result ${index}: URL ${fullUrl} doesn't match allowed domains`);
+          return;
+        }
+
         results.push({
           title,
           url: fullUrl,
@@ -201,7 +233,8 @@ export async function searchDuckDuckGo(
  */
 export async function searchBing(
   query: string,
-  maxResults: number = 10
+  maxResults: number = 10,
+  allowedDomains?: string[]
 ): Promise<SearchEngineResult> {
   try {
     const encodedQuery = encodeURIComponent(query);
@@ -225,8 +258,8 @@ export async function searchBing(
     const results: SearchResult[] = [];
 
     // Bing organic results selector
-    $(".b_algo").each((index, element) => {
-      if (index >= maxResults) return false;
+    $(".b_algo").each((_index, element) => {
+      if (results.length >= maxResults) return false;
 
       const $element = $(element);
       const $link = $element.find("h2 a");
@@ -235,6 +268,9 @@ export async function searchBing(
       const snippet = $element.find(".b_caption p").first().text().trim();
 
       if (title && url && url.startsWith("http")) {
+        // Check if URL matches allowed domains
+        if (!matchesAllowedDomains(url, allowedDomains)) return;
+
         results.push({
           title,
           url,

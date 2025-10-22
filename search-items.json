@@ -16,10 +16,7 @@
             ],
             "maxResults": 10,
             "allowedDomains": [
-              "fnac.com",
-              "cdiscount.com",
-              "darty.com",
-              "boulanger.com"
+              "fnac.com"
             ]
           }
         }
@@ -35,9 +32,26 @@
         "params": {
           "name": "scrape_page",
           "arguments": {
-            "url": "https://www.fnac.com/Apple-iPhone-17-Pro-Max-6-9-5G-Double-SIM-1-To-Orange-cosmique/a21960835/w-4",
+            "url": "https://www.fnac.com/Apple-iPhone-17-Pro-Max-6-9-5G-Double-SIM-256-Go-Orange-cosmique/a21960839/w-4",
             "format": "yaml",
             "flatten": true
+          }
+        }
+      }
+    },
+    {
+      "name": "Test 3: Search and Scrape automatique",
+      "content": "Recherche et scrape automatique des 3 meilleurs résultats pour iPhone 17 Pro Max",
+      "payload": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "search_and_scrape",
+          "arguments": {
+            "query": "iphone 17 pro max 1To orange cosmique france",
+            "engine": "duckduckgo",
+            "maxResults": 3
           }
         }
       }
