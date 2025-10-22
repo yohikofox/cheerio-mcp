@@ -12,6 +12,41 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+// Utility function to filter search results by allowed domains
+function filterResultsByDomain(results: any[], allowedDomains?: string[]): any[] {
+  if (!allowedDomains || allowedDomains.length === 0) {
+    return results;
+  }
+
+  return results.map(result => {
+    if (result && result.results) {
+      const filteredResults = result.results.filter((item: any) => {
+        try {
+          const url = new URL(item.url);
+          const hostname = url.hostname.replace('www.', '');
+
+          // Check if hostname matches any of the allowed domains
+          return allowedDomains.some(domain => {
+            const cleanDomain = domain.replace('www.', '').toLowerCase();
+            return hostname.toLowerCase().includes(cleanDomain) || hostname.toLowerCase().endsWith(cleanDomain);
+          });
+        } catch (e) {
+          return false;
+        }
+      });
+
+      return {
+        ...result,
+        results: filteredResults,
+        filteredBy: allowedDomains,
+        originalCount: result.results.length,
+        filteredCount: filteredResults.length
+      };
+    }
+    return result;
+  });
+}
+
 // MCP Server Info
 const SERVER_INFO = {
   name: "web-search-mcp",
@@ -74,7 +109,7 @@ app.post("/mcp", async (req, res) => {
           tools: [
             {
               name: "search_web",
-              description: "Search the web using multiple search engines (Google, DuckDuckGo, Bing) and return organic results",
+              description: "Search the web using multiple search engines (Google, DuckDuckGo, Bing) and return organic results. Can filter results by allowed domains (e.g., fnac.com, cdiscount.com).",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -97,6 +132,13 @@ app.post("/mcp", async (req, res) => {
                     default: 10,
                     minimum: 1,
                     maximum: 10,
+                  },
+                  allowedDomains: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                    },
+                    description: "Optional: Filter results to only include these domains (e.g., ['fnac.com', 'cdiscount.com']). If not specified, returns all results.",
                   },
                 },
                 required: ["query"],
@@ -133,7 +175,7 @@ app.post("/mcp", async (req, res) => {
             },
             {
               name: "search_and_scrape",
-              description: "Perform a web search and automatically scrape the content of top results",
+              description: "Perform a web search and automatically scrape the content of top results. Can filter results by allowed domains.",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -153,6 +195,13 @@ app.post("/mcp", async (req, res) => {
                     default: 5,
                     minimum: 1,
                     maximum: 10,
+                  },
+                  allowedDomains: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                    },
+                    description: "Optional: Filter results to only include these domains (e.g., ['fnac.com', 'cdiscount.com']).",
                   },
                 },
                 required: ["query"],
@@ -231,7 +280,7 @@ app.post("/mcp", async (req, res) => {
             },
             {
               name: "search_and_scrape_dynamic",
-              description: "Search and scrape with Playwright (JavaScript-heavy sites) - Returns YAML format with product data",
+              description: "Search and scrape with Playwright (JavaScript-heavy sites) - Returns YAML format with product data. Can filter results by allowed domains.",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -257,6 +306,13 @@ app.post("/mcp", async (req, res) => {
                     enum: ["yaml", "json"],
                     description: "Output format",
                     default: "yaml",
+                  },
+                  allowedDomains: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                    },
+                    description: "Optional: Filter results to only include these domains (e.g., ['fnac.com', 'cdiscount.com']).",
                   },
                 },
                 required: ["query"],
@@ -286,7 +342,7 @@ app.post("/mcp", async (req, res) => {
 
         switch (name) {
           case "search_web": {
-            const { query, engines = ["duckduckgo"], maxResults = 10 } = args || {};
+            const { query, engines = ["duckduckgo"], maxResults = 10, allowedDomains } = args || {};
 
             if (!query) {
               return res.json({
@@ -318,11 +374,14 @@ app.post("/mcp", async (req, res) => {
               if (searchResult) results.push(searchResult);
             }
 
+            // Apply domain filtering if allowedDomains is provided
+            const filteredResults = filterResultsByDomain(results, allowedDomains);
+
             toolResult = {
               content: [
                 {
                   type: "text",
-                  text: JSON.stringify(results, null, 2),
+                  text: JSON.stringify(filteredResults, null, 2),
                 },
               ],
             };
@@ -468,7 +527,7 @@ app.post("/mcp", async (req, res) => {
           }
 
           case "search_and_scrape": {
-            const { query, engine = "duckduckgo", maxResults = 5 } = args || {};
+            const { query, engine = "duckduckgo", maxResults = 5, allowedDomains } = args || {};
 
             if (!query) {
               return res.json({
@@ -503,14 +562,16 @@ app.post("/mcp", async (req, res) => {
                 });
             }
 
-            const urls = searchResults.results.map((r) => r.url);
+            // Apply domain filtering if allowedDomains is provided
+            const filtered = filterResultsByDomain([searchResults], allowedDomains)[0];
+            const urls = filtered.results.map((r: any) => r.url);
             const scrapedPages = await scrapeMultiplePages(urls);
 
             toolResult = {
               content: [
                 {
                   type: "text",
-                  text: JSON.stringify({ searchResults, scrapedPages }, null, 2),
+                  text: JSON.stringify({ searchResults: filtered, scrapedPages }, null, 2),
                 },
               ],
             };
@@ -518,7 +579,7 @@ app.post("/mcp", async (req, res) => {
           }
 
           case "search_and_scrape_dynamic": {
-            const { query, engine = "duckduckgo", maxResults = 3, format = "yaml" } = args || {};
+            const { query, engine = "duckduckgo", maxResults = 3, format = "yaml", allowedDomains } = args || {};
 
             if (!query) {
               return res.json({
@@ -553,7 +614,9 @@ app.post("/mcp", async (req, res) => {
                 });
             }
 
-            const urls = searchResults.results.map((r) => r.url);
+            // Apply domain filtering if allowedDomains is provided
+            const filtered = filterResultsByDomain([searchResults], allowedDomains)[0];
+            const urls = filtered.results.map((r: any) => r.url);
             const scrapedPages = await scrapeMultiplePagesWithPlaywright(urls, { format: format as 'yaml' | 'json' });
 
             // Return YAML string if format is yaml, otherwise return JSON
@@ -572,7 +635,7 @@ app.post("/mcp", async (req, res) => {
                 content: [
                   {
                     type: "text",
-                    text: JSON.stringify({ searchResults, scrapedPages }, null, 2),
+                    text: JSON.stringify({ searchResults: filtered, scrapedPages }, null, 2),
                   },
                 ],
               };
