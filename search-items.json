@@ -1,0 +1,46 @@
+{
+  "queries": [
+    {
+      "name": "Test 1: Avec filtrage e-commerce français",
+      "content": "iphone 17 pro max 1To orange cosmic",
+      "payload": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+          "name": "search_web",
+          "arguments": {
+            "query": "iphone 17 pro max 1To orange cosmic france",
+            "engines": [
+              "duckduckgo"
+            ],
+            "maxResults": 10,
+            "allowedDomains": [
+              "fnac.com",
+              "cdiscount.com",
+              "darty.com",
+              "boulanger.com"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Test 2: Scrape page Fnac avec Playwright",
+      "content": "Scraping de la page produit iPhone 17 Pro Max sur Fnac",
+      "payload": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+          "name": "scrape_page",
+          "arguments": {
+            "url": "https://www.fnac.com/Apple-iPhone-17-Pro-Max-6-9-5G-Double-SIM-1-To-Orange-cosmique/a21960835/w-4",
+            "format": "yaml",
+            "flatten": true
+          }
+        }
+      }
+    }
+  ]
+}

@@ -4,7 +4,6 @@ import {
   searchDuckDuckGo,
   searchBing,
 } from "./searchEngines.js";
-import { scrapePage, scrapeMultiplePages } from "./scraper.js";
 import { scrapeMultiplePagesWithPlaywright, scrapePageWithPlaywright, takeScreenshotWithPlaywright } from "./scraper-playwright.js";
 
 const app = express();
@@ -54,7 +53,7 @@ const SERVER_INFO = {
 };
 
 // Health check endpoint (non-MCP, pour Kubernetes)
-app.get("/health", (req, res) => {
+app.get("/health", (_req, res) => {
   res.json({ status: "healthy", service: SERVER_INFO.name, version: SERVER_INFO.version });
 });
 
@@ -146,7 +145,7 @@ app.post("/mcp", async (req, res) => {
             },
             {
               name: "scrape_page",
-              description: "Extract content from a web page including title, text, headings, links, images, and metadata",
+              description: "Extract structured data from a web page using Playwright (JavaScript-heavy sites) - Returns YAML/JSON format",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -154,13 +153,24 @@ app.post("/mcp", async (req, res) => {
                     type: "string",
                     description: "The URL of the page to scrape",
                   },
+                  format: {
+                    type: "string",
+                    enum: ["yaml", "json"],
+                    description: "Output format",
+                    default: "yaml",
+                  },
+                  flatten: {
+                    type: "boolean",
+                    description: "Flatten the data structure",
+                    default: true,
+                  },
                 },
                 required: ["url"],
               },
             },
             {
               name: "scrape_multiple_pages",
-              description: "Extract content from multiple web pages in parallel",
+              description: "Extract structured data from multiple web pages in parallel using Playwright (JavaScript-heavy sites) - Returns YAML/JSON format",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -169,13 +179,24 @@ app.post("/mcp", async (req, res) => {
                     items: { type: "string" },
                     description: "Array of URLs to scrape",
                   },
+                  format: {
+                    type: "string",
+                    enum: ["yaml", "json"],
+                    description: "Output format",
+                    default: "yaml",
+                  },
+                  flatten: {
+                    type: "boolean",
+                    description: "Flatten the data structure",
+                    default: true,
+                  },
                 },
                 required: ["urls"],
               },
             },
             {
               name: "search_and_scrape",
-              description: "Perform a web search and automatically scrape the content of top results. Can filter results by allowed domains.",
+              description: "Perform a web search and automatically scrape the content of top results using Playwright (JavaScript-heavy sites). Can filter results by allowed domains. Returns YAML/JSON format.",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -195,6 +216,12 @@ app.post("/mcp", async (req, res) => {
                     default: 5,
                     minimum: 1,
                     maximum: 10,
+                  },
+                  format: {
+                    type: "string",
+                    enum: ["yaml", "json"],
+                    description: "Output format",
+                    default: "yaml",
                   },
                   allowedDomains: {
                     type: "array",
@@ -389,7 +416,7 @@ app.post("/mcp", async (req, res) => {
           }
 
           case "scrape_page": {
-            const { url } = args || {};
+            const { url, format = "yaml", flatten = true } = args || {};
 
             if (!url) {
               return res.json({
@@ -402,20 +429,34 @@ app.post("/mcp", async (req, res) => {
               });
             }
 
-            const pageData = await scrapePage(url);
-            toolResult = {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(pageData, null, 2),
-                },
-              ],
-            };
+            const pageData = await scrapePageWithPlaywright(url, { format: format as 'yaml' | 'json', flatten });
+
+            // Return YAML string if format is yaml, otherwise return JSON
+            if (format === 'yaml') {
+              const yamlOutput = `---\nurl: ${pageData.url}\ntitle: ${pageData.title}\n${pageData.yaml || ''}`;
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: yamlOutput,
+                  },
+                ],
+              };
+            } else {
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(pageData, null, 2),
+                  },
+                ],
+              };
+            }
             break;
           }
 
           case "scrape_multiple_pages": {
-            const { urls } = args || {};
+            const { urls, format = "yaml", flatten = true } = args || {};
 
             if (!urls || !Array.isArray(urls)) {
               return res.json({
@@ -428,15 +469,29 @@ app.post("/mcp", async (req, res) => {
               });
             }
 
-            const pagesData = await scrapeMultiplePages(urls);
-            toolResult = {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(pagesData, null, 2),
-                },
-              ],
-            };
+            const scrapedPages = await scrapeMultiplePagesWithPlaywright(urls, { format: format as 'yaml' | 'json', flatten });
+
+            // Return YAML string if format is yaml, otherwise return JSON
+            if (format === 'yaml') {
+              const yamlOutput = scrapedPages.map(c => `---\nurl: ${c.url}\ntitle: ${c.title}\n${c.yaml || ''}`).join('\n\n');
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: yamlOutput,
+                  },
+                ],
+              };
+            } else {
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(scrapedPages, null, 2),
+                  },
+                ],
+              };
+            }
             break;
           }
 
@@ -527,7 +582,7 @@ app.post("/mcp", async (req, res) => {
           }
 
           case "search_and_scrape": {
-            const { query, engine = "duckduckgo", maxResults = 5, allowedDomains } = args || {};
+            const { query, engine = "duckduckgo", maxResults = 5, format = "yaml", allowedDomains } = args || {};
 
             if (!query) {
               return res.json({
@@ -565,16 +620,29 @@ app.post("/mcp", async (req, res) => {
             // Apply domain filtering if allowedDomains is provided
             const filtered = filterResultsByDomain([searchResults], allowedDomains)[0];
             const urls = filtered.results.map((r: any) => r.url);
-            const scrapedPages = await scrapeMultiplePages(urls);
+            const scrapedPages = await scrapeMultiplePagesWithPlaywright(urls, { format: format as 'yaml' | 'json' });
 
-            toolResult = {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify({ searchResults: filtered, scrapedPages }, null, 2),
-                },
-              ],
-            };
+            // Return YAML string if format is yaml, otherwise return JSON
+            if (format === 'yaml') {
+              const yamlOutput = scrapedPages.map(c => `---\nurl: ${c.url}\ntitle: ${c.title}\n${c.yaml || ''}`).join('\n\n');
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: yamlOutput,
+                  },
+                ],
+              };
+            } else {
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify({ searchResults: filtered, scrapedPages }, null, 2),
+                  },
+                ],
+              };
+            }
             break;
           }
 
@@ -690,13 +758,13 @@ app.post("/mcp", async (req, res) => {
 });
 
 // Root endpoint with API info
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
   res.json({
     name: SERVER_INFO.name,
     version: SERVER_INFO.version,
     protocol: "Model Context Protocol",
     protocolVersion: "2025-06-18",
-    description: "MCP server for web search and content extraction using Cheerio",
+    description: "MCP server for web search and content extraction using Playwright",
     endpoints: {
       health: "GET /health - Kubernetes health check",
       mcp: "POST /mcp - MCP JSON-RPC 2.0 endpoint",
@@ -704,9 +772,12 @@ app.get("/", (req, res) => {
     documentation: "https://modelcontextprotocol.io/docs",
     tools: [
       "search_web - Search the web with multiple engines",
-      "scrape_page - Extract content from a single page",
-      "scrape_multiple_pages - Extract content from multiple pages",
-      "search_and_scrape - Search and scrape top results",
+      "scrape_page - Extract structured data from a page with Playwright (YAML/JSON)",
+      "scrape_multiple_pages - Extract data from multiple pages with Playwright (YAML/JSON)",
+      "search_and_scrape - Search and scrape top results with Playwright (YAML/JSON)",
+      "scrape_dynamic - Extract structured data with Playwright (YAML/JSON)",
+      "take_screenshot - Take a screenshot with Playwright",
+      "search_and_scrape_dynamic - Search and scrape with Playwright (YAML/JSON)",
     ],
   });
 });
