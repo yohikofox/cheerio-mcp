@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  browser-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5900:5900"  # VNC port (si tu veux utiliser un client VNC natif)
+      - "6080:6080"  # noVNC web interface
+    environment:
+      - DISPLAY=:99
+    volumes:
+      - ./test-browser.ts:/app/test-browser.ts:ro
+    stdin_open: true
+    tty: true
