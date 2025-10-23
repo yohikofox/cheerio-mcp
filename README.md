@@ -197,3 +197,9 @@ npm run build
 ## Licence
 
 MIT
+
+
+
+# TODO
+
+* Ajouter un un outil pour afficher une image a partir d'un base64.

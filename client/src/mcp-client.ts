@@ -112,14 +112,14 @@ export class MCPWebClient {
     const promise = new Promise((resolve, reject) => {
       this.pendingRequests.set(id, { resolve, reject });
 
-      // Timeout after 30 seconds
+      // Timeout after 60 seconds (scraping can be slow)
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
           console.error(`[MCP Client] Request #${id} timeout`);
           reject(new Error('Request timeout'));
         }
-      }, 30000);
+      }, 60000);
     });
 
     // Send POST request
