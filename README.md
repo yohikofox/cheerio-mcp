@@ -203,3 +203,141 @@ MIT
 # TODO
 
 * Ajouter un un outil pour afficher une image a partir d'un base64.
+
+
+
+si rebrowser fonctionne, voir pour installer le chromium dans le dockerfile:
+
+```sh
+npx rebrowser-playwright install chromium
+```                                                                                                                               
+
+
+# A new Hope
+
+> j'ai une question un peu idiote. Il n'est pas possible d'utiliser playwright en mode headless = false dans un container docker ? 
+
+⏺ Pas idiote du tout ! Oui, c'est totalement possible avec quelques tricks. 🐳
+
+  Le problème : Docker n'a pas d'écran par défaut, donc headless=false ne peut pas afficher de fenêtre.
+
+  Solutions :
+
+  1. Xvfb (X Virtual Frame Buffer) - Le plus simple
+  FROM node:20
+
+  # Installer Xvfb pour simuler un display
+  RUN apt-get update && apt-get install -y xvfb
+
+  # Lancer l'app avec Xvfb
+  CMD xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' npm start
+
+  2. VNC (pour voir le navigateur à distance) - Pour le debugging
+  FROM node:20
+
+  # Installer VNC + bureau virtuel
+  RUN apt-get update && apt-get install -y \
+      xvfb x11vnc fluxbox \
+      chromium chromium-driver
+
+  # Exposer le port VNC
+  EXPOSE 5900
+
+  CMD x11vnc -create -env FD_PROG=/usr/bin/fluxbox \
+      -forever -usepw -shared
+
+  Puis tu peux te connecter avec un client VNC (ex: RealVNC) à localhost:5900 et voir le navigateur en live !
+
+  3. Image Docker toute prête
+  services:
+    scraper:
+      image: browserless/chrome
+      ports:
+        - "3000:3000"
+
+  Pourquoi faire ça ?
+  - Même en headless=false, certains sites détectent moins le bot
+  - Permet de débugger visuellement dans un environnement isolé
+  - Utile pour des screenshots/vidéos de scraping
+
+  Tu veux un exemple complet de Dockerfile avec Xvfb ?
+
+> je n'ai pas compris comment on peut debug 
+
+⏺ Excellent point ! Voici comment voir et débugger visuellement le navigateur qui tourne dans Docker :
+
+  Flow de debugging avec VNC
+
+  1. Docker lance le navigateur avec un écran virtuel (Xvfb)
+  Docker Container
+  ├── Xvfb (écran virtuel :99)
+  │   └── Chrome en mode headless=false s'affiche sur cet écran
+  ├── VNC Server (partage l'écran :99 sur le port 5900)
+  └── Ton app Node.js qui lance Playwright
+
+  2. Depuis ton Mac, tu te connectes au VNC
+  # Depuis ton terminal Mac
+  open vnc://localhost:5900
+
+  3. Tu vois le navigateur Chrome en live ! 🎥
+  - Tu vois la souris bouger
+  - Les clics sur les boutons
+  - Le scroll
+  - Les captchas qui apparaissent
+  - Tout comme si c'était sur ton écran
+
+  Exemple concret
+
+  Dockerfile :
+  FROM node:20
+
+  # Installer environnement graphique + VNC
+  RUN apt-get update && apt-get install -y \
+      xvfb \
+      x11vnc \
+      fluxbox \
+      chromium \
+      chromium-driver
+
+  WORKDIR /app
+  COPY package*.json ./
+  RUN npm install
+
+  COPY . .
+
+  # Script de démarrage
+  RUN echo '#!/bin/bash\n\
+  Xvfb :99 -screen 0 1920x1080x24 &\n\
+  export DISPLAY=:99\n\
+  fluxbox &\n\
+  x11vnc -display :99 -forever -nopw -listen 0.0.0.0 -xkb &\n\
+  npm start\n\
+  ' > /app/start.sh && chmod +x /app/start.sh
+
+  EXPOSE 5900 3000
+
+  CMD ["/app/start.sh"]
+
+  docker-compose.yml :
+  services:
+    scraper:
+      build: .
+      ports:
+        - "5900:5900"  # Port VNC
+        - "3000:3000"  # Port MCP
+      environment:
+        - DISPLAY=:99
+
+  Pour débugger :
+  # 1. Lance Docker
+  docker-compose up
+
+  # 2. Connecte-toi avec VNC (sur Mac)
+  open vnc://localhost:5900
+
+  # 3. Tu vois Chrome s'ouvrir, naviguer, etc. EN DIRECT !
+
+  Alternative plus simple : noVNC (VNC dans le navigateur)
+  Tu peux même voir le navigateur Docker dans ton navigateur web avec noVNC !
+
+  Tu veux que je te prépare un exemple complet avec noVNC ?

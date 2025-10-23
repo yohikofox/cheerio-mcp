@@ -2,27 +2,25 @@ import express, { Request, Response } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { randomBytes } from "crypto";
-import {
-  searchGoogle,
-  searchDuckDuckGo,
-  searchBing,
-} from "./searchEngines.js";
+import { searchGoogle, searchDuckDuckGo, searchBing } from "./searchEngines.js";
 import {
   scrapeMultiplePagesWithPlaywright,
   scrapePageWithPlaywright,
-  takeScreenshotWithPlaywright
+  takeScreenshotWithPlaywright,
 } from "./scraper-playwright.js";
+
+// import { scrapePageWithPlaywright } from "./scraper-playwright-test.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, "../public")));
 
 const PORT = process.env.PORT || 3000;
-const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26'];
-const DEFAULT_PROTOCOL_VERSION = '2025-03-26';
+const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26"];
+const DEFAULT_PROTOCOL_VERSION = "2025-03-26";
 
 // Session management
 interface Session {
@@ -38,7 +36,7 @@ const sessions = new Map<string, Session>();
 
 // Generate cryptographically secure session ID
 function generateSessionId(): string {
-  return randomBytes(16).toString('hex');
+  return randomBytes(16).toString("hex");
 }
 
 // Get or create session
@@ -63,7 +61,11 @@ function createSession(protocolVersion: string): Session {
 }
 
 // Send SSE message to all clients in a session
-function sendSSEMessage(session: Session, message: any, eventType: string = 'message') {
+function sendSSEMessage(
+  session: Session,
+  message: any,
+  eventType: string = "message"
+) {
   session.lastEventId++;
   const eventId = session.lastEventId.toString();
   const data = JSON.stringify(message);
@@ -79,11 +81,11 @@ function sendSSEMessage(session: Session, message: any, eventType: string = 'mes
   const sseData = `id: ${eventId}\nevent: ${eventType}\ndata: ${data}\n\n`;
 
   // Send to all connected clients
-  session.clients.forEach(client => {
+  session.clients.forEach((client) => {
     try {
       client.write(sseData);
     } catch (error) {
-      console.error('Error writing to SSE client:', error);
+      console.error("Error writing to SSE client:", error);
       session.clients.delete(client);
     }
   });
@@ -109,23 +111,27 @@ app.get("/health", (_req, res) => {
     service: SERVER_INFO.name,
     version: SERVER_INFO.version,
     transport: "HTTP with SSE",
-    protocol: "MCP"
+    protocol: "MCP",
   });
 });
 
 // Root endpoint
 app.get("/", (_req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
 // Middleware to validate MCP headers
-function validateMCPHeaders(req: Request, res: Response, requireSession: boolean = true): {
+function validateMCPHeaders(
+  req: Request,
+  res: Response,
+  requireSession: boolean = true
+): {
   valid: boolean;
   session?: Session;
   protocolVersion?: string;
 } {
-  const protocolVersion = req.headers['mcp-protocol-version'] as string;
-  const sessionId = req.headers['mcp-session-id'] as string;
+  const protocolVersion = req.headers["mcp-protocol-version"] as string;
+  const sessionId = req.headers["mcp-session-id"] as string;
 
   // Validate protocol version
   if (!protocolVersion) {
@@ -139,8 +145,8 @@ function validateMCPHeaders(req: Request, res: Response, requireSession: boolean
           jsonrpc: "2.0",
           error: {
             code: -32600,
-            message: "Missing MCP-Protocol-Version header"
-          }
+            message: "Missing MCP-Protocol-Version header",
+          },
         });
         return { valid: false };
       }
@@ -155,8 +161,8 @@ function validateMCPHeaders(req: Request, res: Response, requireSession: boolean
       jsonrpc: "2.0",
       error: {
         code: -32600,
-        message: `Unsupported protocol version: ${protocolVersion}`
-      }
+        message: `Unsupported protocol version: ${protocolVersion}`,
+      },
     });
     return { valid: false };
   }
@@ -168,8 +174,8 @@ function validateMCPHeaders(req: Request, res: Response, requireSession: boolean
         jsonrpc: "2.0",
         error: {
           code: -32600,
-          message: "Missing Mcp-Session-Id header"
-        }
+          message: "Missing Mcp-Session-Id header",
+        },
       });
       return { valid: false };
     }
@@ -180,8 +186,8 @@ function validateMCPHeaders(req: Request, res: Response, requireSession: boolean
         jsonrpc: "2.0",
         error: {
           code: -32600,
-          message: "Session not found or expired"
-        }
+          message: "Session not found or expired",
+        },
       });
       return { valid: false };
     }
@@ -195,51 +201,57 @@ function validateMCPHeaders(req: Request, res: Response, requireSession: boolean
 // GET /mcp - Establish SSE stream
 app.get("/mcp", (req: Request, res: Response) => {
   // Accept session ID from header or create a new session
-  let sessionId = req.headers['mcp-session-id'] as string;
-  const lastEventId = req.headers['last-event-id'] as string;
+  let sessionId = req.headers["mcp-session-id"] as string;
+  const lastEventId = req.headers["last-event-id"] as string;
 
   let session = sessionId ? getSession(sessionId) : null;
 
   // If no session exists, create a new one
   if (!session) {
-    const protocolVersion = (req.headers['mcp-protocol-version'] as string) || DEFAULT_PROTOCOL_VERSION;
+    const protocolVersion =
+      (req.headers["mcp-protocol-version"] as string) ||
+      DEFAULT_PROTOCOL_VERSION;
     session = createSession(protocolVersion);
     sessionId = session.id;
   }
 
   // Set SSE headers
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
 
   // Add client to session
   session.clients.add(res);
 
   // Send initial comment to establish connection
-  res.write(': connected\n\n');
+  res.write(": connected\n\n");
 
   // Send endpoint event with session information (for browser compatibility)
   const endpointData = {
     sessionId: session.id,
-    endpoint: '/mcp',
-    protocolVersion: session.protocolVersion
+    endpoint: "/mcp",
+    protocolVersion: session.protocolVersion,
   };
   res.write(`event: endpoint\ndata: ${JSON.stringify(endpointData)}\n\n`);
 
   // Handle resumability - resend messages after lastEventId
   if (lastEventId) {
     const lastId = parseInt(lastEventId, 10);
-    const messagesToResend = session.messageQueue.filter(msg => parseInt(msg.id, 10) > lastId);
+    const messagesToResend = session.messageQueue.filter(
+      (msg) => parseInt(msg.id, 10) > lastId
+    );
 
-    messagesToResend.forEach(msg => {
-      const sseData = `id: ${msg.id}\nevent: message\ndata: ${JSON.stringify(msg.data)}\n\n`;
+    messagesToResend.forEach((msg) => {
+      const sseData = `id: ${msg.id}\nevent: message\ndata: ${JSON.stringify(
+        msg.data
+      )}\n\n`;
       res.write(sseData);
     });
   }
 
   // Handle client disconnect
-  req.on('close', () => {
+  req.on("close", () => {
     session.clients.delete(res);
   });
 });
@@ -274,7 +286,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
   }
 
   // Handle initialize - session should already exist from SSE connection
-  if (method === 'initialize') {
+  if (method === "initialize") {
     const validation = validateMCPHeaders(req, res, true);
     if (!validation.valid) return;
 
@@ -285,7 +297,8 @@ app.post("/mcp", async (req: Request, res: Response) => {
       protocolVersion: session.protocolVersion,
       serverInfo: SERVER_INFO,
       capabilities: SERVER_CAPABILITIES,
-      instructions: "Use the available tools to search the web and scrape content from websites."
+      instructions:
+        "Use the available tools to search the web and scrape content from websites.",
     };
 
     // Send response via SSE (202 Accepted)
@@ -327,7 +340,8 @@ app.post("/mcp", async (req: Request, res: Response) => {
           tools: [
             {
               name: "search_web",
-              description: "Search the web using multiple search engines (Google, DuckDuckGo, Bing) and return organic results. Can filter results by allowed domains (e.g., fnac.com, cdiscount.com).",
+              description:
+                "Search the web using multiple search engines (Google, DuckDuckGo, Bing) and return organic results. Can filter results by allowed domains (e.g., fnac.com, cdiscount.com).",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -356,7 +370,8 @@ app.post("/mcp", async (req: Request, res: Response) => {
                     items: {
                       type: "string",
                     },
-                    description: "Optional: Filter results to only include these domains",
+                    description:
+                      "Optional: Filter results to only include these domains",
                   },
                 },
                 required: ["query"],
@@ -364,7 +379,8 @@ app.post("/mcp", async (req: Request, res: Response) => {
             },
             {
               name: "scrape_page",
-              description: "Extract structured data from a web page using Playwright (JavaScript-heavy sites) - Returns YAML/JSON format",
+              description:
+                "Extract structured data from a web page using Playwright (JavaScript-heavy sites) - Returns YAML/JSON format",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -389,7 +405,8 @@ app.post("/mcp", async (req: Request, res: Response) => {
             },
             {
               name: "scrape_multiple_pages",
-              description: "Extract structured data from multiple web pages in parallel using Playwright",
+              description:
+                "Extract structured data from multiple web pages in parallel using Playwright",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -415,7 +432,8 @@ app.post("/mcp", async (req: Request, res: Response) => {
             },
             {
               name: "take_screenshot",
-              description: "Take a screenshot of a webpage using Playwright - Returns base64 encoded image",
+              description:
+                "Take a screenshot of a webpage using Playwright - Returns base64 encoded image",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -458,7 +476,12 @@ app.post("/mcp", async (req: Request, res: Response) => {
 
         switch (name) {
           case "search_web": {
-            const { query, engines = ["duckduckgo"], maxResults = 10, allowedDomains } = args || {};
+            const {
+              query,
+              engines = ["duckduckgo"],
+              maxResults = 10,
+              allowedDomains,
+            } = args || {};
 
             if (!query) {
               throw new Error("Invalid params: 'query' is required");
@@ -469,13 +492,25 @@ app.post("/mcp", async (req: Request, res: Response) => {
               let searchResult;
               switch (engine.toLowerCase()) {
                 case "google":
-                  searchResult = await searchGoogle(query, maxResults, allowedDomains);
+                  searchResult = await searchGoogle(
+                    query,
+                    maxResults,
+                    allowedDomains
+                  );
                   break;
                 case "duckduckgo":
-                  searchResult = await searchDuckDuckGo(query, maxResults, allowedDomains);
+                  searchResult = await searchDuckDuckGo(
+                    query,
+                    maxResults,
+                    allowedDomains
+                  );
                   break;
                 case "bing":
-                  searchResult = await searchBing(query, maxResults, allowedDomains);
+                  searchResult = await searchBing(
+                    query,
+                    maxResults,
+                    allowedDomains
+                  );
                   break;
                 default:
                   continue;
@@ -501,10 +536,15 @@ app.post("/mcp", async (req: Request, res: Response) => {
               throw new Error("Invalid params: 'url' is required");
             }
 
-            const pageData = await scrapePageWithPlaywright(url, { format: format as 'yaml' | 'json', flatten });
+            const pageData = await scrapePageWithPlaywright(url, {
+              format: format as "yaml" | "json",
+              flatten,
+            });
 
-            if (format === 'yaml') {
-              const yamlOutput = `---\nurl: ${pageData.url}\ntitle: ${pageData.title}\n${pageData.yaml || ''}`;
+            if (format === "yaml") {
+              const yamlOutput = `---\nurl: ${pageData.url}\ntitle: ${
+                pageData.title
+              }\n${pageData.yaml || ""}`;
               toolResult = {
                 content: [
                   {
@@ -533,10 +573,18 @@ app.post("/mcp", async (req: Request, res: Response) => {
               throw new Error("Invalid params: 'urls' must be an array");
             }
 
-            const scrapedPages = await scrapeMultiplePagesWithPlaywright(urls, { format: format as 'yaml' | 'json', flatten });
+            const scrapedPages = await scrapeMultiplePagesWithPlaywright(urls, {
+              format: format as "yaml" | "json",
+              flatten,
+            });
 
-            if (format === 'yaml') {
-              const yamlOutput = scrapedPages.map(c => `---\nurl: ${c.url}\ntitle: ${c.title}\n${c.yaml || ''}`).join('\n\n');
+            if (format === "yaml") {
+              const yamlOutput = scrapedPages
+                .map(
+                  (c) =>
+                    `---\nurl: ${c.url}\ntitle: ${c.title}\n${c.yaml || ""}`
+                )
+                .join("\n\n");
               toolResult = {
                 content: [
                   {
@@ -559,7 +607,12 @@ app.post("/mcp", async (req: Request, res: Response) => {
           }
 
           case "take_screenshot": {
-            const { url, width = 1920, height = 1080, fullPage = false } = args || {};
+            const {
+              url,
+              width = 1920,
+              height = 1080,
+              fullPage = false,
+            } = args || {};
 
             if (!url) {
               throw new Error("Invalid params: 'url' is required");
@@ -569,26 +622,30 @@ app.post("/mcp", async (req: Request, res: Response) => {
               width,
               height,
               fullPage,
-              format: 'png'
+              format: "png",
             });
 
-            const base64Image = screenshotData.screenshot.toString('base64');
+            const base64Image = screenshotData.screenshot.toString("base64");
 
             toolResult = {
               content: [
                 {
                   type: "text",
-                  text: JSON.stringify({
-                    url: screenshotData.url,
-                    title: screenshotData.title,
-                    image: {
-                      format: screenshotData.format,
-                      base64: base64Image,
-                      size: screenshotData.screenshot.length
+                  text: JSON.stringify(
+                    {
+                      url: screenshotData.url,
+                      title: screenshotData.title,
+                      image: {
+                        format: screenshotData.format,
+                        base64: base64Image,
+                        size: screenshotData.screenshot.length,
+                      },
+                      dimensions: screenshotData.dimensions,
+                      timestamp: screenshotData.timestamp,
                     },
-                    dimensions: screenshotData.dimensions,
-                    timestamp: screenshotData.timestamp
-                  }, null, 2),
+                    null,
+                    2
+                  ),
                 },
               ],
             };
@@ -618,7 +675,6 @@ app.post("/mcp", async (req: Request, res: Response) => {
 
     // Return 202 Accepted
     res.status(202).send();
-
   } catch (error) {
     console.error(`Error handling MCP request:`, error);
 
@@ -639,32 +695,32 @@ app.post("/mcp", async (req: Request, res: Response) => {
 
 // DELETE /mcp - Terminate session
 app.delete("/mcp", (req: Request, res: Response) => {
-  const sessionId = req.headers['mcp-session-id'] as string;
+  const sessionId = req.headers["mcp-session-id"] as string;
 
   if (!sessionId) {
-    res.status(400).send('Missing Mcp-Session-Id header');
+    res.status(400).send("Missing Mcp-Session-Id header");
     return;
   }
 
   const session = getSession(sessionId);
   if (!session) {
-    res.status(404).send('Session not found');
+    res.status(404).send("Session not found");
     return;
   }
 
   // Close all SSE connections
-  session.clients.forEach(client => {
+  session.clients.forEach((client) => {
     try {
       client.end();
     } catch (error) {
-      console.error('Error closing SSE client:', error);
+      console.error("Error closing SSE client:", error);
     }
   });
 
   // Remove session
   sessions.delete(sessionId);
 
-  res.status(200).send('Session terminated');
+  res.status(200).send("Session terminated");
 });
 
 // Cleanup expired sessions (run every 5 minutes)
@@ -685,5 +741,7 @@ app.listen(PORT, () => {
   console.log(`✓ Health check: http://localhost:${PORT}/health`);
   console.log(`✓ MCP endpoint: http://localhost:${PORT}/mcp`);
   console.log(`✓ Server info: ${SERVER_INFO.name} v${SERVER_INFO.version}`);
-  console.log(`✓ Supported protocol versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(', ')}`);
+  console.log(
+    `✓ Supported protocol versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(", ")}`
+  );
 });

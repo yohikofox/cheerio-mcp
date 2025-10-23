@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import YAML from 'yaml';
-import { chromium } from 'playwright-core';
+import { chromium, Page } from 'playwright-core';
+import BrowserManager from './browser-manager.js';
 
 /**
  * Log with timestamp for temporal tracking
@@ -8,6 +9,13 @@ import { chromium } from 'playwright-core';
 function logWithTime(message: string, ...args: any[]): void {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${message}`, ...args);
+}
+
+/**
+ * Generate random delay between min and max (inclusive) to avoid bot-like behavior
+ */
+function randomDelay(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 export interface RawDataItem {
@@ -275,71 +283,19 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
   const { flatten = true, format = 'yaml' } = options;
 
   const startTime = Date.now();
-  let browser;
+  let page: Page | undefined;
+
   try {
-    // Launch browser with anti-detection techniques
-    const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== 'false';
-    logWithTime(`Launching browser in ${isHeadless ? 'HEADLESS' : 'HEADED'} mode with stealth techniques`);
-    
-    browser = await chromium.launch({
-      headless: isHeadless,
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        // Anti-detection flags
-        '--disable-blink-features=AutomationControlled',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-web-security',
-        '--disable-features=site-per-process',
-        '--disable-dev-shm-usage',
-        '--disable-ipc-flooding-protection',
-        // Realistic window size
-        '--window-size=1920,1080',
-        '--start-maximized',
-        // Additional stealth
-        '--no-first-run',
-        '--disable-default-apps',
-        '--disable-extensions-file-access-check',
-        '--disable-extensions-http-throttling'
-      ]
-    });
-    logWithTime('Browser launched successfully');
+    // Use BrowserManager for browser reuse (massive performance gain)
+    const browserManager = BrowserManager.getInstance();
+    const context = await browserManager.getContext();
 
-    const context = await browser.newContext({
-      // Randomized realistic user agent
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      javaScriptEnabled: true,
-      // Realistic viewport
-      viewport: { width: 1920, height: 1080 },
-      deviceScaleFactor: 1,
-      hasTouch: false,
-      isMobile: false,
-      // Additional realism
-      locale: 'fr-FR',
-      timezoneId: 'Europe/Paris',
-      geolocation: { latitude: 48.8566, longitude: 2.3522 }, // Paris
-      permissions: ['geolocation'],
-      // Accept downloads and popups
-      acceptDownloads: true,
-      // Extra headers to look more human
-      extraHTTPHeaders: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Upgrade-Insecure-Requests': '1'
-      }
-    });
+    logWithTime('Creating new page in reused browser context...');
+    page = await context.newPage();
 
-    const page = await context.newPage();
+    if (!page) {
+      throw new Error('Failed to create page');
+    }
 
     // Anti-detection scripts - mask automation fingerprints
     await page.addInitScript(() => {
@@ -427,28 +383,28 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
     
     logWithTime('JavaScript check:', jsCheck);
 
-    // Wait for initial page load and dynamic content
-    await page.waitForTimeout(5000); // Initial wait
-    
-    // Wait additional time for post-TTFB resources as observed in waterfall
-    logWithTime('Waiting additional 10s for post-TTFB resources to load...');
-    await page.waitForTimeout(10000); // Additional 10s wait for waterfall resources
-    
-    // Wait for network to be completely idle again after the additional resources
+    // Wait for initial page load and dynamic content (RANDOMIZED 1-2s to avoid bot detection)
+    await page.waitForTimeout(randomDelay(1000, 2000));
+
+    // Wait additional time for post-TTFB resources (RANDOMIZED 1.5-2.5s to avoid bot detection)
+    logWithTime('Waiting for post-TTFB resources to load...');
+    await page.waitForTimeout(randomDelay(1500, 2500));
+
+    // Wait for network to be completely idle again (OPTIMIZED - reduced timeout from 15s to 5s)
     try {
-      await page.waitForLoadState('networkidle', { timeout: 15000 });
-      logWithTime('Network idle achieved after additional wait');
+      await page.waitForLoadState('networkidle', { timeout: 5000 });
+      logWithTime('Network idle achieved');
     } catch (err) {
-      logWithTime('Network still active after additional wait, proceeding anyway');
+      logWithTime('Network still active, proceeding anyway');
     }
 
-    // Wait for potential dynamic content to load
+    // Wait for potential dynamic content to load (OPTIMIZED - reduced from 10s to 3s)
     try {
       await page.waitForFunction(() => {
         // Wait for any element that might contain specifications
         const specs = document.querySelectorAll('[class*="spec"], [class*="fiche"], [class*="characteristic"], [class*="detail"]');
         return specs.length > 0;
-      }, { timeout: 10000 });
+      }, { timeout: 3000 });
       logWithTime('Specification elements found');
     } catch (err) {
       logWithTime('No specification elements found within timeout');
@@ -465,29 +421,30 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
     
     logWithTime(`Page height: ${pageInfo.height}, Viewport: ${pageInfo.viewportHeight}`);
     
-    // Simulate human mouse movement and scrolling
-    const scrollStep = 300;
-    const humanDelayMin = 200;
-    const humanDelayMax = 500;
-    
-    // Function to get random delay
-    const randomDelay = () => Math.floor(Math.random() * (humanDelayMax - humanDelayMin + 1)) + humanDelayMin;
+    // Simulate human mouse movement and scrolling (RANDOMIZED to avoid bot detection)
+    const scrollStepMin = 400;
+    const scrollStepMax = 600;
     
     // Scroll down progressively with mouse movements
-    for (let currentY = 0; currentY < pageInfo.height; currentY += scrollStep) {
-      // Simulate mouse movement before scroll
+    let currentY = 0;
+    while (currentY < pageInfo.height) {
+      // Random scroll step to avoid predictable pattern
+      const step = randomDelay(scrollStepMin, scrollStepMax);
+      currentY += step;
+
+      // Simulate mouse movement before scroll (randomized position)
       await page.mouse.move(
-        Math.random() * 1920, 
-        Math.random() * 1080
+        randomDelay(100, 1820),
+        randomDelay(100, 980)
       );
-      
+
       // Scroll to position
       await page.evaluate((y) => {
         window.scrollTo({ top: y, behavior: 'smooth' });
       }, currentY);
-      
-      // Human-like delay
-      await page.waitForTimeout(randomDelay());
+
+      // Human-like delay (randomized between 50-150ms)
+      await page.waitForTimeout(randomDelay(50, 150));
       
       // Check if new content appeared
       const newHeight = await page.evaluate(() => document.body.scrollHeight);
@@ -497,54 +454,69 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
       }
     }
     
-    // Stay at bottom briefly
-    await page.waitForTimeout(1000);
-    
+    // Stay at bottom briefly (RANDOMIZED 200-500ms to avoid bot detection)
+    await page.waitForTimeout(randomDelay(200, 500));
+
     // Scroll back to top smoothly
     await page.evaluate(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
-    
-    await page.waitForTimeout(1000);
-    logWithTime('Human-like scrolling completed');
 
-    // Wait a bit more
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(randomDelay(200, 400)); // RANDOMIZED to avoid bot detection
+    logWithTime('Scrolling completed');
 
-    // Try to expand any collapsible sections by clicking on them
+    // Try to expand any collapsible sections by clicking on them (with limits to avoid timeout)
     try {
       // Look for buttons or elements that might expand specification sections
       const expandableSelectors = [
         'button[aria-expanded="false"]',
         '[class*="collaps"]',
-        '[class*="expand"]', 
+        '[class*="expand"]',
         '[class*="accord"]',
         '[class*="toggle"]',
         '[data-testid*="expand"]',
-        '[role="button"]',
         // Orange specific selectors
         '[class*="fiche"]',
         '[class*="characteristic"]',
         '[class*="detail"]'
       ];
 
-      for (const selector of expandableSelectors) {
-        const elements = await page.$$(selector);
-        for (const element of elements) {
-          try {
-            // Check if element is visible and clickable
-            if (await element.isVisible()) {
-              await element.click({ timeout: 1000 });
-              await page.waitForTimeout(500); // Wait for content to load
+      let clickedCount = 0;
+      const MAX_CLICKS = 10; // Limit to 10 clicks maximum to avoid timeout
+      const SECTION_TIMEOUT = 5000; // Max 5 seconds for this entire section
+
+      const clickPromise = (async () => {
+        for (const selector of expandableSelectors) {
+          if (clickedCount >= MAX_CLICKS) break;
+
+          const elements = await page.$$(selector);
+          for (const element of elements) {
+            if (clickedCount >= MAX_CLICKS) break;
+
+            try {
+              // Check if element is visible and clickable
+              if (await element.isVisible()) {
+                await element.click({ timeout: 500 }); // Reduced from 1000ms
+                clickedCount++;
+                await page.waitForTimeout(randomDelay(100, 200)); // Reduced delay
+              }
+            } catch (err) {
+              // Continue if clicking fails
             }
-          } catch (err) {
-            // Continue if clicking fails
           }
         }
-      }
+      })();
 
-      // Wait for any newly loaded content
-      await page.waitForTimeout(2000);
+      // Wait for clicks with global timeout
+      await Promise.race([
+        clickPromise,
+        new Promise(resolve => setTimeout(resolve, SECTION_TIMEOUT))
+      ]);
+
+      logWithTime(`Clicked ${clickedCount} expandable elements`);
+
+      // Wait for any newly loaded content (RANDOMIZED 200-400ms, reduced from 400-700ms)
+      await page.waitForTimeout(randomDelay(200, 400));
     } catch (err) {
       logWithTime('Could not expand sections:', err instanceof Error ? err.message : String(err));
     }
@@ -571,19 +543,45 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
     
     logWithTime('Final page state:', finalState);
 
-    // Get the fully rendered HTML
-    const html = await page.content();
+    // Get the fully rendered HTML (with timeout to avoid hanging)
+    let html: string;
+    try {
+      logWithTime('Extracting HTML content...');
+      html = await Promise.race([
+        page.content(),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error('HTML extraction timeout')), 10000)
+        )
+      ]);
+      logWithTime(`HTML extracted: ${Math.round(html.length / 1024)}KB`);
+    } catch (error) {
+      logWithTime('Failed to extract HTML:', error instanceof Error ? error.message : String(error));
+      throw error;
+    }
 
-    // Save HTML for debugging
-    const fs = await import('fs');
-    const path = await import('path');
-    const urlHash = Buffer.from(url).toString('base64').replace(/[/+=]/g, '_').substring(0, 50);
-    const htmlPath = path.join(process.cwd(), 'log', `scraped-${urlHash}.html`);
-    await fs.promises.writeFile(htmlPath, html, 'utf-8');
-    logWithTime(`HTML saved to: ${htmlPath}`);
+    // Save HTML for debugging (optional, skip if too large to avoid issues)
+    if (process.env.SAVE_HTML_DEBUG !== 'false') {
+      try {
+        const fs = await import('fs');
+        const path = await import('path');
+        const urlHash = Buffer.from(url).toString('base64').replace(/[/+=]/g, '_').substring(0, 50);
+        const htmlPath = path.join(process.cwd(), 'log', `scraped-${urlHash}.html`);
 
-    // Close browser
-    await browser.close();
+        // Only save if HTML is reasonable size (< 5MB)
+        if (html.length < 5 * 1024 * 1024) {
+          await fs.promises.writeFile(htmlPath, html, 'utf-8');
+          logWithTime(`HTML saved to: ${htmlPath}`);
+        } else {
+          logWithTime(`HTML too large (${Math.round(html.length / 1024 / 1024)}MB), skipping save`);
+        }
+      } catch (err) {
+        logWithTime('Failed to save HTML:', err instanceof Error ? err.message : String(err));
+        // Continue anyway, saving HTML is not critical
+      }
+    }
+
+    // Close page (browser is reused via BrowserManager)
+    await page.close();
 
     const $ = cheerio.load(html);
 
@@ -608,8 +606,13 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
       yaml
     };
   } catch (error) {
-    if (browser) {
-      await browser.close();
+    // Close page on error (browser is reused via BrowserManager)
+    if (page) {
+      try {
+        await page.close();
+      } catch (err) {
+        // Ignore close errors
+      }
     }
 
     return {
