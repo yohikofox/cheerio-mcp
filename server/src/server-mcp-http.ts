@@ -381,6 +381,14 @@ app.post("/mcp", async (req: Request, res: Response) => {
                     description:
                       "Optional: Filter results to only include these domains",
                   },
+                  excludedDomains: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                    },
+                    description:
+                      "Optional: Exclude results from these domains (e.g., ['fnac.com', 'amazon.fr'])",
+                  },
                 },
                 required: ["query"],
               },
@@ -503,6 +511,14 @@ app.post("/mcp", async (req: Request, res: Response) => {
                     description:
                       "Optional: Filter results to only include these domains",
                   },
+                  excludedDomains: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                    },
+                    description:
+                      "Optional: Exclude results from these domains (e.g., ['fnac.com', 'amazon.fr'])",
+                  },
                   minFrequency: {
                     type: "number",
                     description:
@@ -541,6 +557,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
               engines = ["duckduckgo"],
               maxResults = 10,
               allowedDomains,
+              excludedDomains,
             } = args || {};
 
             if (!query) {
@@ -555,21 +572,24 @@ app.post("/mcp", async (req: Request, res: Response) => {
                   searchResult = await searchGoogle(
                     query,
                     maxResults,
-                    allowedDomains
+                    allowedDomains,
+                    excludedDomains
                   );
                   break;
                 case "duckduckgo":
                   searchResult = await searchDuckDuckGo(
                     query,
                     maxResults,
-                    allowedDomains
+                    allowedDomains,
+                    excludedDomains
                   );
                   break;
                 case "bing":
                   searchResult = await searchBing(
                     query,
                     maxResults,
-                    allowedDomains
+                    allowedDomains,
+                    excludedDomains
                   );
                   break;
                 default:
@@ -718,6 +738,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
               engines = ["duckduckgo"],
               maxResults = 5,
               allowedDomains,
+              excludedDomains,
               minFrequency = 1,
               format = "yaml",
             } = args || {};
@@ -735,21 +756,24 @@ app.post("/mcp", async (req: Request, res: Response) => {
                   searchResult = await searchGoogle(
                     query,
                     maxResults,
-                    allowedDomains
+                    allowedDomains,
+                    excludedDomains
                   );
                   break;
                 case "duckduckgo":
                   searchResult = await searchDuckDuckGo(
                     query,
                     maxResults,
-                    allowedDomains
+                    allowedDomains,
+                    excludedDomains
                   );
                   break;
                 case "bing":
                   searchResult = await searchBing(
                     query,
                     maxResults,
-                    allowedDomains
+                    allowedDomains,
+                    excludedDomains
                   );
                   break;
                 default:

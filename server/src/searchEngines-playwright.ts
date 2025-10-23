@@ -17,16 +17,34 @@ export interface SearchEngineResult {
 }
 
 /**
- * Check if URL matches allowed domains
+ * Check if URL matches allowed domains and is not in excluded domains
  */
-function matchesAllowedDomains(url: string, allowedDomains?: string[]): boolean {
-  if (!allowedDomains || allowedDomains.length === 0) {
-    return true;
-  }
-
+function matchesAllowedDomains(
+  url: string,
+  allowedDomains?: string[],
+  excludedDomains?: string[]
+): boolean {
   try {
     const urlObj = new URL(url);
     const hostname = urlObj.hostname.replace("www.", "").toLowerCase();
+
+    // Check excluded domains first
+    if (excludedDomains && excludedDomains.length > 0) {
+      const isExcluded = excludedDomains.some((domain) => {
+        const cleanDomain = domain.replace("www.", "").toLowerCase();
+        return hostname.includes(cleanDomain) || hostname.endsWith(cleanDomain);
+      });
+
+      if (isExcluded) {
+        console.log(`[Filter] URL excluded: ${url} (matches excluded domain)`);
+        return false;
+      }
+    }
+
+    // Check allowed domains
+    if (!allowedDomains || allowedDomains.length === 0) {
+      return true;
+    }
 
     return allowedDomains.some((domain) => {
       const cleanDomain = domain.replace("www.", "").toLowerCase();
@@ -43,7 +61,8 @@ function matchesAllowedDomains(url: string, allowedDomains?: string[]): boolean 
 export async function searchGoogleWithPlaywright(
   query: string,
   maxResults: number = 10,
-  allowedDomains?: string[]
+  allowedDomains?: string[],
+  excludedDomains?: string[]
 ): Promise<SearchEngineResult> {
   let page: Page | undefined;
 
@@ -106,8 +125,8 @@ export async function searchGoogleWithPlaywright(
       )
         return;
 
-      // Check if URL matches allowed domains
-      if (!matchesAllowedDomains(linkUrl, allowedDomains)) return;
+      // Check if URL matches allowed domains and is not excluded
+      if (!matchesAllowedDomains(linkUrl, allowedDomains, excludedDomains)) return;
 
       const title = $link.find("h3").text().trim();
       const snippet = $element.find(".VwiC3b, .yXK7lf, .IsZvec").text().trim();
@@ -159,7 +178,8 @@ export async function searchGoogleWithPlaywright(
 export async function searchDuckDuckGoWithPlaywright(
   query: string,
   maxResults: number = 10,
-  allowedDomains?: string[]
+  allowedDomains?: string[],
+  excludedDomains?: string[]
 ): Promise<SearchEngineResult> {
   let page: Page | undefined;
 
@@ -223,7 +243,7 @@ export async function searchDuckDuckGoWithPlaywright(
           }
         }
 
-        if (!matchesAllowedDomains(fullUrl, allowedDomains)) {
+        if (!matchesAllowedDomains(fullUrl, allowedDomains, excludedDomains)) {
           return;
         }
 
@@ -273,7 +293,8 @@ export async function searchDuckDuckGoWithPlaywright(
 export async function searchBingWithPlaywright(
   query: string,
   maxResults: number = 10,
-  allowedDomains?: string[]
+  allowedDomains?: string[],
+  excludedDomains?: string[]
 ): Promise<SearchEngineResult> {
   let page: Page | undefined;
 
@@ -316,7 +337,7 @@ export async function searchBingWithPlaywright(
       const snippet = $element.find(".b_caption p").text().trim();
 
       if (title && linkUrl && linkUrl.startsWith("http")) {
-        if (!matchesAllowedDomains(linkUrl, allowedDomains)) {
+        if (!matchesAllowedDomains(linkUrl, allowedDomains, excludedDomains)) {
           return;
         }
 
