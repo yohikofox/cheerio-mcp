@@ -194,18 +194,17 @@ function validateMCPHeaders(req: Request, res: Response, requireSession: boolean
 
 // GET /mcp - Establish SSE stream
 app.get("/mcp", (req: Request, res: Response) => {
-  const sessionId = req.headers['mcp-session-id'] as string;
+  // Accept session ID from header or create a new session
+  let sessionId = req.headers['mcp-session-id'] as string;
   const lastEventId = req.headers['last-event-id'] as string;
 
-  if (!sessionId) {
-    res.status(400).send('Missing Mcp-Session-Id header');
-    return;
-  }
+  let session = sessionId ? getSession(sessionId) : null;
 
-  const session = getSession(sessionId);
+  // If no session exists, create a new one
   if (!session) {
-    res.status(404).send('Session not found');
-    return;
+    const protocolVersion = (req.headers['mcp-protocol-version'] as string) || DEFAULT_PROTOCOL_VERSION;
+    session = createSession(protocolVersion);
+    sessionId = session.id;
   }
 
   // Set SSE headers
@@ -219,6 +218,14 @@ app.get("/mcp", (req: Request, res: Response) => {
 
   // Send initial comment to establish connection
   res.write(': connected\n\n');
+
+  // Send endpoint event with session information (for browser compatibility)
+  const endpointData = {
+    sessionId: session.id,
+    endpoint: '/mcp',
+    protocolVersion: session.protocolVersion
+  };
+  res.write(`event: endpoint\ndata: ${JSON.stringify(endpointData)}\n\n`);
 
   // Handle resumability - resend messages after lastEventId
   if (lastEventId) {
@@ -266,29 +273,30 @@ app.post("/mcp", async (req: Request, res: Response) => {
     return;
   }
 
-  // Handle initialize - no session required
+  // Handle initialize - session should already exist from SSE connection
   if (method === 'initialize') {
-    const validation = validateMCPHeaders(req, res, false);
+    const validation = validateMCPHeaders(req, res, true);
     if (!validation.valid) return;
 
-    const protocolVersion = validation.protocolVersion || DEFAULT_PROTOCOL_VERSION;
-    const session = createSession(protocolVersion);
+    const session = validation.session!;
     session.initialized = true;
 
     const result = {
-      protocolVersion,
+      protocolVersion: session.protocolVersion,
       serverInfo: SERVER_INFO,
       capabilities: SERVER_CAPABILITIES,
       instructions: "Use the available tools to search the web and scrape content from websites."
     };
 
-    // For initialize, we return the response directly with session header
-    res.setHeader('Mcp-Session-Id', session.id);
-    res.status(200).json({
+    // Send response via SSE (202 Accepted)
+    const response = {
       jsonrpc: "2.0",
       id,
-      result
-    });
+      result,
+    };
+
+    sendSSEMessage(session, response);
+    res.status(202).send();
     return;
   }
 
