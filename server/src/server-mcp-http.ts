@@ -8,6 +8,10 @@ import {
   scrapePageWithPlaywright,
   takeScreenshotWithPlaywright,
 } from "./scraper-playwright.js";
+import {
+  aggregateScrapedData,
+  formatAggregatedDataAsYAML,
+} from "./aggregator.js";
 
 // import { scrapePageWithPlaywright } from "./scraper-playwright-test.js";
 
@@ -460,6 +464,58 @@ app.post("/mcp", async (req: Request, res: Response) => {
                 required: ["url"],
               },
             },
+            {
+              name: "search_and_scrape",
+              description:
+                "Search the web and scrape all result pages, then aggregate the data to remove duplicates. Returns a unified dataset from multiple sources.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  query: {
+                    type: "string",
+                    description: "The search query",
+                  },
+                  engines: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["google", "duckduckgo", "bing"],
+                    },
+                    description: "List of search engines to use",
+                    default: ["duckduckgo"],
+                  },
+                  maxResults: {
+                    type: "number",
+                    description: "Maximum results per engine to scrape (1-10)",
+                    default: 5,
+                    minimum: 1,
+                    maximum: 10,
+                  },
+                  allowedDomains: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                    },
+                    description:
+                      "Optional: Filter results to only include these domains",
+                  },
+                  minFrequency: {
+                    type: "number",
+                    description:
+                      "Only include data found in at least N sources (default: 1)",
+                    default: 1,
+                    minimum: 1,
+                  },
+                  format: {
+                    type: "string",
+                    enum: ["yaml", "json"],
+                    description: "Output format",
+                    default: "yaml",
+                  },
+                },
+                required: ["query"],
+              },
+            },
           ],
         };
         break;
@@ -649,6 +705,120 @@ app.post("/mcp", async (req: Request, res: Response) => {
                 },
               ],
             };
+            break;
+          }
+
+          case "search_and_scrape": {
+            const {
+              query,
+              engines = ["duckduckgo"],
+              maxResults = 5,
+              allowedDomains,
+              minFrequency = 1,
+              format = "yaml",
+            } = args || {};
+
+            if (!query) {
+              throw new Error("Invalid params: 'query' is required");
+            }
+
+            // Step 1: Search across all engines
+            const searchResults = [];
+            for (const engine of engines) {
+              let searchResult;
+              switch (engine.toLowerCase()) {
+                case "google":
+                  searchResult = await searchGoogle(
+                    query,
+                    maxResults,
+                    allowedDomains
+                  );
+                  break;
+                case "duckduckgo":
+                  searchResult = await searchDuckDuckGo(
+                    query,
+                    maxResults,
+                    allowedDomains
+                  );
+                  break;
+                case "bing":
+                  searchResult = await searchBing(
+                    query,
+                    maxResults,
+                    allowedDomains
+                  );
+                  break;
+                default:
+                  continue;
+              }
+              if (searchResult && searchResult.results.length > 0) {
+                searchResults.push(searchResult);
+              }
+            }
+
+            // Step 2: Collect all unique URLs from search results
+            const urlsToScrape = new Set<string>();
+            for (const result of searchResults) {
+              for (const item of result.results) {
+                urlsToScrape.add(item.url);
+              }
+            }
+
+            const urls = Array.from(urlsToScrape);
+
+            // Step 3: Scrape all URLs in parallel
+            const scrapedPages = await scrapeMultiplePagesWithPlaywright(urls, {
+              format: "json",
+              flatten: true,
+            });
+
+            // Step 4: Aggregate scraped data
+            const { aggregatedData, stats } = aggregateScrapedData(
+              scrapedPages,
+              {
+                minFrequency,
+                deduplicateSimilar: true,
+              }
+            );
+
+            // Step 5: Format output
+            if (format === "yaml") {
+              const yamlOutput = formatAggregatedDataAsYAML(
+                aggregatedData,
+                stats
+              );
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: yamlOutput,
+                  },
+                ],
+              };
+            } else {
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(
+                      {
+                        query,
+                        engines,
+                        searchResults: searchResults.map((r) => ({
+                          engine: r.engine,
+                          resultCount: r.results.length,
+                        })),
+                        scrapedPages: urls.length,
+                        aggregatedData,
+                        stats,
+                      },
+                      null,
+                      2
+                    ),
+                  },
+                ],
+              };
+            }
             break;
           }
 
