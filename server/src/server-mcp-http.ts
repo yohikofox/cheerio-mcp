@@ -2,7 +2,11 @@ import express, { Request, Response } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { randomBytes } from "crypto";
-import { searchGoogle, searchDuckDuckGo, searchBing } from "./searchEngines.js";
+import {
+  searchGoogleWithPlaywright as searchGoogle,
+  searchDuckDuckGoWithPlaywright as searchDuckDuckGo,
+  searchBingWithPlaywright as searchBing
+} from "./searchEngines-playwright.js";
 import {
   scrapeMultiplePagesWithPlaywright,
   scrapePageWithPlaywright,
