@@ -89,6 +89,102 @@ function calculateStats(data: RawDataItem[], scrapingTimeMs: number): ScrapingSt
 }
 
 /**
+ * Check if an element should be filtered out (generic noise detection)
+ */
+function shouldFilterElement($el: cheerio.Cheerio<any>, $: cheerio.CheerioAPI): boolean {
+  // 1. Structural zones to exclude
+  const tagName = $el.prop('tagName')?.toLowerCase();
+  if (['header', 'footer', 'nav', 'aside'].includes(tagName || '')) {
+    return true;
+  }
+
+  // 2. Check if element is within excluded zones
+  if ($el.closest('header, footer, nav, aside').length > 0) {
+    return true;
+  }
+
+  // 3. Role-based exclusion
+  const role = $el.attr('role');
+  if (role && ['navigation', 'banner', 'contentinfo', 'complementary'].includes(role)) {
+    return true;
+  }
+
+  // 4. Class/ID patterns indicating UI/navigation elements
+  const classAttr = $el.attr('class') || '';
+  const idAttr = $el.attr('id') || '';
+  const combinedAttrs = `${classAttr} ${idAttr}`.toLowerCase();
+
+  const noisePatterns = [
+    'nav', 'navigation', 'menu', 'breadcrumb', 'footer', 'header',
+    'sidebar', 'aside', 'modal', 'popup', 'cookie', 'banner',
+    'advertisement', 'promo', 'newsletter', 'social', 'share',
+    'login', 'signup', 'search-bar', 'toolbar', 'sticky'
+  ];
+
+  if (noisePatterns.some(pattern => combinedAttrs.includes(pattern))) {
+    return true;
+  }
+
+  // 5. Hidden elements
+  const style = $el.attr('style') || '';
+  if (style.includes('display:none') || style.includes('display: none') ||
+      style.includes('visibility:hidden') || style.includes('visibility: hidden')) {
+    return true;
+  }
+
+  const ariaHidden = $el.attr('aria-hidden');
+  if (ariaHidden === 'true') {
+    return true;
+  }
+
+  // 6. Product suggestions/recommendations (not the main product)
+  if (classAttr.includes('product-mini-card') ||
+      classAttr.includes('recommendation') ||
+      classAttr.includes('suggestion')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if text content is likely noise
+ */
+function isNoiseText(text: string): boolean {
+  if (!text || text.length < 3) return true;
+
+  const lowerText = text.toLowerCase().trim();
+
+  // Common noise phrases in French/English
+  const noisePhrases = [
+    'cookie', 'en savoir plus', 'accepter', 'refuser',
+    'mentions légales', 'cgv', 'cgu', 'confidentialité',
+    'téléchargez l\'app', 'télécharger l\'app', 'download app',
+    'besoin d\'aide', 'contactez', 'service client',
+    'suivez-nous', 'réseaux sociaux', 'newsletter',
+    'mon compte', 'se connecter', 'connexion', 'panier',
+    'retour', 'précédent', 'suivant', 'fermer', 'ouvrir',
+    'en stock', 'rupture', 'disponible', 'indisponible'
+  ];
+
+  // Exact match for short phrases
+  if (lowerText.length < 50) {
+    for (const phrase of noisePhrases) {
+      if (lowerText === phrase || lowerText.includes(phrase)) {
+        return true;
+      }
+    }
+  }
+
+  // Filter out pure navigation text
+  if (lowerText.match(/^(>|<|«|»|\||\/)+$/)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Extract raw data from fully rendered HTML using Cheerio
  */
 function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
@@ -102,7 +198,7 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
 
   const addData = (item: RawDataItem) => {
     const key = `${item.label || ''}:${item.value}`;
-    if (!seen.has(key) && item.value.length > 0 && item.value.length < 500) {
+    if (!seen.has(key) && item.value.length > 0 && item.value.length < 500 && !isNoiseText(item.value)) {
       seen.add(key);
       data.push(item);
     }
@@ -111,6 +207,10 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
   // Extract from tables
   $('table').each((_, table) => {
     const $table = $(table);
+
+    // Skip if table is in filtered zone
+    if (shouldFilterElement($table, $)) return;
+
     $table.find('tr').each((_, row) => {
       const $row = $(row);
       const cells = $row.find('td, th').toArray();
@@ -119,7 +219,7 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
         const label = cleanText($(cells[0]).text());
         const value = cleanText($(cells[1]).text());
 
-        if (label && value && label !== value) {
+        if (label && value && label !== value && !isNoiseText(label) && !isNoiseText(value)) {
           addData({ label, value, type: 'table' });
         }
       }
@@ -130,6 +230,10 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
   // Look for attribute/spec rows (div/span patterns with label-value pairs)
   $('[class*="spec"], [class*="attribute"], [class*="feature"], [class*="detail"], [class*="characteristic"], [class*="fiche"]').each((_, el) => {
     const $el = $(el);
+
+    // Skip if element is in filtered zone
+    if (shouldFilterElement($el, $)) return;
+
     const text = cleanText($el.text());
 
     // Try to find label-value patterns within
@@ -138,7 +242,8 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
       const label = cleanText($(children[0]).text());
       const value = cleanText($(children[1]).text());
 
-      if (label && value && label !== value && label.length < 100 && value.length < 200) {
+      if (label && value && label !== value && label.length < 100 && value.length < 200 &&
+          !isNoiseText(label) && !isNoiseText(value)) {
         addData({ label, value, type: 'table' });
       }
     }
@@ -148,15 +253,20 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
   // Look for any element containing ":" which often indicates label:value patterns
   $('div, span, p, li').each((_, el) => {
     const $el = $(el);
+
+    // Skip if element is in filtered zone
+    if (shouldFilterElement($el, $)) return;
+
     const text = cleanText($el.text());
-    
+
     // Look for patterns like "Label: Value" or "Label : Value"
     if (text.includes(':') && text.length < 200 && text.split(':').length === 2) {
       const parts = text.split(':');
       const label = cleanText(parts[0]);
       const value = cleanText(parts[1]);
-      
-      if (label && value && label.length < 100 && value.length < 150) {
+
+      if (label && value && label.length < 100 && value.length < 150 &&
+          !isNoiseText(label) && !isNoiseText(value)) {
         addData({ label, value, type: 'table' });
       }
     }
@@ -165,15 +275,20 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
   // Extract from any table-like structures with more flexibility
   $('tr, .row, [class*="line"], [class*="item"]').each((_, row) => {
     const $row = $(row);
+
+    // Skip if row is in filtered zone
+    if (shouldFilterElement($row, $)) return;
+
     const cells = $row.find('td, th, div, span').toArray();
-    
+
     // Look for any two-column structure
     if (cells.length >= 2) {
       for (let i = 0; i < cells.length - 1; i += 2) {
         const label = cleanText($(cells[i]).text());
         const value = cleanText($(cells[i + 1]).text());
-        
-        if (label && value && label !== value && label.length < 100 && value.length < 200) {
+
+        if (label && value && label !== value && label.length < 100 && value.length < 200 &&
+            !isNoiseText(label) && !isNoiseText(value)) {
           addData({ label, value, type: 'table' });
         }
       }
@@ -183,23 +298,31 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
   // Extract from definition lists
   $('dl').each((_, dl) => {
     const $dl = $(dl);
+
+    // Skip if definition list is in filtered zone
+    if (shouldFilterElement($dl, $)) return;
+
     $dl.find('dt').each((i, dt) => {
       const label = cleanText($(dt).text());
       const dd = $(dt).next('dd');
       const value = cleanText(dd.text());
 
-      if (label && value) {
+      if (label && value && !isNoiseText(label) && !isNoiseText(value)) {
         addData({ label, value, type: 'text' });
       }
     });
   });
 
-  // Extract headings
-  $('h1, h2, h3, h4').each((_, heading) => {
+  // Extract headings (focus on main content area)
+  $('main h1, main h2, main h3, main h4, [role="main"] h1, [role="main"] h2, [role="main"] h3, [role="main"] h4, article h1, article h2, article h3, article h4').each((_, heading) => {
     const $heading = $(heading);
+
+    // Skip if heading is in filtered zone
+    if (shouldFilterElement($heading, $)) return;
+
     const headingText = cleanText($heading.text());
 
-    if (headingText) {
+    if (headingText && !isNoiseText(headingText)) {
       addData({ value: headingText, type: 'text' });
     }
   });
@@ -207,9 +330,13 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
   // Extract prices
   $('[class*="price"], [class*="amount"], [data-price]').each((_, el) => {
     const $el = $(el);
+
+    // Skip if price is in filtered zone
+    if (shouldFilterElement($el, $)) return;
+
     const text = cleanText($el.text());
 
-    if (text && text.match(/\d+[\s.,]?\d*\s*[€$]/)) {
+    if (text && text.match(/\d+[\s.,]?\d*\s*[€$]/) && !isNoiseText(text)) {
       const label = $el.attr('aria-label') || $el.attr('title') || 'Price';
       addData({ label, value: text, type: 'price' });
     }
@@ -218,17 +345,21 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
   // Extract merchant information
   $('[class*="retailer"], [class*="merchant"], [class*="store"], [class*="shop"]').each((_, el) => {
     const $el = $(el);
+
+    // Skip if merchant is in filtered zone
+    if (shouldFilterElement($el, $)) return;
+
     const merchantName = cleanText($el.find('[class*="name"], h3, h4, strong, span').first().text());
     const priceEl = $el.find('[class*="price"], [class*="amount"]').first();
     const price = cleanText(priceEl.text());
     const availability = cleanText($el.find('[class*="stock"], [class*="availability"], [class*="rupture"]').text());
     const shipping = cleanText($el.find('[class*="shipping"], [class*="delivery"], [class*="livraison"]').text());
 
-    if (merchantName) {
+    if (merchantName && !isNoiseText(merchantName)) {
       addData({ label: 'Merchant', value: merchantName, type: 'text' });
-      if (price) addData({ label: `${merchantName} - Price`, value: price, type: 'price' });
-      if (availability) addData({ label: `${merchantName} - Availability`, value: availability, type: 'text' });
-      if (shipping) addData({ label: `${merchantName} - Shipping`, value: shipping, type: 'text' });
+      if (price && !isNoiseText(price)) addData({ label: `${merchantName} - Price`, value: price, type: 'price' });
+      if (availability && !isNoiseText(availability)) addData({ label: `${merchantName} - Availability`, value: availability, type: 'text' });
+      if (shipping && !isNoiseText(shipping)) addData({ label: `${merchantName} - Shipping`, value: shipping, type: 'text' });
     }
   });
 
@@ -255,20 +386,29 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
     }
   });
 
-  // Extract list items
-  $('ul > li, ol > li').each((_, li) => {
+  // Extract list items (only from main content)
+  $('main ul > li, main ol > li, [role="main"] ul > li, [role="main"] ol > li, article ul > li, article ol > li').each((_, li) => {
     const $li = $(li);
+
+    // Skip if list item is in filtered zone
+    if (shouldFilterElement($li, $)) return;
+
     const text = cleanText($li.clone().children().remove().end().text());
 
-    if (text) {
+    if (text && !isNoiseText(text)) {
       addData({ value: text, type: 'text' });
     }
   });
 
-  // Extract paragraphs
-  $('p').each((_, p) => {
-    const text = cleanText($(p).text());
-    if (text && text.length > 10) {
+  // Extract paragraphs (only from main content)
+  $('main p, [role="main"] p, article p').each((_, p) => {
+    const $p = $(p);
+
+    // Skip if paragraph is in filtered zone
+    if (shouldFilterElement($p, $)) return;
+
+    const text = cleanText($p.text());
+    if (text && text.length > 10 && !isNoiseText(text)) {
       addData({ value: text, type: 'text' });
     }
   });

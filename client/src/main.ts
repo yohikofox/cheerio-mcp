@@ -150,10 +150,11 @@ function renderFormField(name: string, schema: any, required: boolean): string {
       </div>
     `;
   } else if (schema.type === 'array') {
+    const defaultValue = schema.default ? schema.default.join('\n') : '';
     return `
       <div class="form-group">
         <label for="${id}">${label}${required ? ' *' : ''}</label>
-        <textarea id="${id}" name="${name}" ${required ? 'required' : ''} placeholder="${schema.description || ''}"></textarea>
+        <textarea id="${id}" name="${name}" ${required ? 'required' : ''} placeholder="${schema.description || ''}">${defaultValue}</textarea>
         <small>One item per line</small>
       </div>
     `;
@@ -198,13 +199,16 @@ async function handleToolSubmit(event: Event, tool: MCPTool) {
     const value = formData.get(name);
 
     if (propSchema.type === 'array') {
-      args[name] = value ? (value as string).split('\n').filter(v => v.trim()) : [];
+      const arrayValue = value ? (value as string).split('\n').filter(v => v.trim()) : [];
+      args[name] = arrayValue.length > 0 ? arrayValue : (propSchema.default || []);
     } else if (propSchema.type === 'number') {
       args[name] = value ? parseFloat(value as string) : propSchema.default;
     } else if (propSchema.type === 'boolean') {
       args[name] = (form.elements.namedItem(name) as HTMLInputElement).checked;
     } else if (value) {
       args[name] = value;
+    } else if (propSchema.default !== undefined) {
+      args[name] = propSchema.default;
     }
   }
 

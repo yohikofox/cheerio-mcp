@@ -5,7 +5,7 @@ import { randomBytes } from "crypto";
 import {
   searchGoogleWithPlaywright as searchGoogle,
   searchDuckDuckGoWithPlaywright as searchDuckDuckGo,
-  searchBingWithPlaywright as searchBing
+  searchBingWithPlaywright as searchBing,
 } from "./searchEngines-playwright.js";
 import {
   scrapeMultiplePagesWithPlaywright,
@@ -388,6 +388,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
                     },
                     description:
                       "Optional: Exclude results from these domains (e.g., ['fnac.com', 'amazon.fr'])",
+                    default: ["fnac.com", "darty.com", "idealo.fr", ".cz"],
                   },
                 },
                 required: ["query"],
@@ -510,6 +511,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
                     },
                     description:
                       "Optional: Filter results to only include these domains",
+                    default: ["duckduckgo.com"],
                   },
                   excludedDomains: {
                     type: "array",
@@ -518,6 +520,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
                     },
                     description:
                       "Optional: Exclude results from these domains (e.g., ['fnac.com', 'amazon.fr'])",
+                    default: ["fnac.com", "darty.com", "idealo.fr", ".cz"],
                   },
                   minFrequency: {
                     type: "number",
