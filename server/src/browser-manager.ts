@@ -27,7 +27,7 @@ class BrowserManager {
   async getBrowser(): Promise<Browser> {
     if (!this.browser || !this.browser.isConnected()) {
       console.log("[BrowserManager] Launching new browser instance...");
-      const isHeadless = true; //process.env.PLAYWRIGHT_HEADLESS !== 'false';
+      const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== 'false';
 
       this.browser = await chromium.launch({
         headless: isHeadless,
