@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Client - Model Context Protocol</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .status-bar {
+            background: #f5f5f5;
+            padding: 15px 30px;
+            border-bottom: 2px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+
+        .status-dot.connected {
+            background: #4CAF50;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+        }
+
+        .session-info {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-bottom: 2px solid #ddd;
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 15px 25px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .tab:hover {
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .tool-panel {
+            display: none;
+        }
+
+        .tool-panel.active {
+            display: block;
+        }
+
+        .tool-description {
+            background: #f0f4ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: monospace;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .result-container {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+        }
+
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay.show {
+            display: flex;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #c33;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>MCP Client</h1>
+            <p>Model Context Protocol - Dynamic Tool Discovery</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Initializing...</span>
+            </div>
+            <div class="session-info">
+                Session: <span id="sessionId">-</span> | Protocol: <span id="protocolVersion">-</span>
+            </div>
+        </div>
+
+        <div class="tabs" id="tabsContainer"></div>
+
+        <div class="content" id="contentContainer"></div>
+    </div>
+
+    <script>
+        // MCP Client State
+        const state = {
+            sessionId: null,
+            protocolVersion: '2025-06-18',
+            eventSource: null,
+            tools: [],
+            pendingRequests: new Map(),
+            requestId: 1
+        };
+
+        const MCP_ENDPOINT = '/mcp';
+
+        // Initialize MCP Session
+        async function initializeMCP() {
+            showLoading(true);
+            updateStatus('Initializing session...', false);
+
+            try {
+                const response = await fetch(MCP_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'MCP-Protocol-Version': state.protocolVersion
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: state.requestId++,
+                        method: 'initialize',
+                        params: {}
+                    })
+                });
+
+                const sessionId = response.headers.get('Mcp-Session-Id');
+                if (!sessionId) {
+                    throw new Error('No session ID received');
+                }
+
+                const data = await response.json();
+                state.sessionId = sessionId;
+                state.protocolVersion = data.result.protocolVersion;
+
+                document.getElementById('sessionId').textContent = sessionId.substring(0, 8) + '...';
+                document.getElementById('protocolVersion').textContent = state.protocolVersion;
+
+                updateStatus('Connecting to SSE stream...', false);
+                await connectSSE();
+
+                updateStatus('Discovering tools...', false);
+                await discoverTools();
+
+                updateStatus('Connected', true);
+                showLoading(false);
+
+            } catch (error) {
+                updateStatus('Failed to initialize: ' + error.message, false);
+                showLoading(false);
+                showError('Initialization failed', error);
+            }
+        }
+
+        // Connect to SSE Stream
+        function connectSSE() {
+            return new Promise((resolve, reject) => {
+                const url = `${MCP_ENDPOINT}`;
+                state.eventSource = new EventSource(url, {
+                    headers: {
+                        'Mcp-Session-Id': state.sessionId
+                    }
+                });
+
+                // Note: EventSource doesn't support custom headers in browser
+                // We'll use a workaround by adding session ID as query param
+                state.eventSource = new EventSource(`${url}?session=${state.sessionId}`);
+
+                // Actually, EventSource in browser doesn't support headers
+                // We need to pass session ID differently
+                // Let's create a proper implementation
+                const es = new EventSource(MCP_ENDPOINT);
+
+                // Store reference with session header hack
+                const originalOpen = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function() {
+                    originalOpen.apply(this, arguments);
+                    this.setRequestHeader('Mcp-Session-Id', state.sessionId);
+                };
+
+                state.eventSource = new EventSource(MCP_ENDPOINT);
+
+                state.eventSource.onopen = () => {
+                    console.log('SSE connected');
+                    resolve();
+                };
+
+                state.eventSource.addEventListener('message', (event) => {
+                    const data = JSON.parse(event.data);
+                    handleSSEMessage(data, event.lastEventId);
+                });
+
+                state.eventSource.onerror = (error) => {
+                    console.error('SSE error:', error);
+                    if (state.eventSource.readyState === EventSource.CLOSED) {
+                        reject(new Error('SSE connection closed'));
+                    }
+                };
+
+                // Timeout after 5 seconds
+                setTimeout(() => resolve(), 2000);
+            });
+        }
+
+        // Handle SSE Message
+        function handleSSEMessage(data, eventId) {
+            console.log('SSE message:', data, 'Event ID:', eventId);
+
+            if (data.id && state.pendingRequests.has(data.id)) {
+                const { resolve } = state.pendingRequests.get(data.id);
+                state.pendingRequests.delete(data.id);
+                resolve(data);
+            }
+        }
+
+        // Send MCP Request
+        async function sendMCPRequest(method, params = {}) {
+            const id = state.requestId++;
+
+            // Create promise for SSE response
+            const promise = new Promise((resolve, reject) => {
+                state.pendingRequests.set(id, { resolve, reject });
+
+                // Timeout after 30 seconds
+                setTimeout(() => {
+                    if (state.pendingRequests.has(id)) {
+                        state.pendingRequests.delete(id);
+                        reject(new Error('Request timeout'));
+                    }
+                }, 30000);
+            });
+
+            // Send POST request
+            const response = await fetch(MCP_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'MCP-Protocol-Version': state.protocolVersion,
+                    'Mcp-Session-Id': state.sessionId
+                },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id,
+                    method,
+                    params
+                })
+            });
+
+            if (response.status !== 202) {
+                const error = await response.json();
+                throw new Error(error.error?.message || 'Request failed');
+            }
+
+            // Wait for SSE response
+            return promise;
+        }
+
+        // Discover Tools
+        async function discoverTools() {
+            const response = await sendMCPRequest('tools/list');
+            state.tools = response.result.tools;
+            renderTools();
+        }
+
+        // Render Tools UI
+        function renderTools() {
+            const tabsContainer = document.getElementById('tabsContainer');
+            const contentContainer = document.getElementById('contentContainer');
+
+            tabsContainer.innerHTML = '';
+            contentContainer.innerHTML = '';
+
+            state.tools.forEach((tool, index) => {
+                // Create tab
+                const tab = document.createElement('button');
+                tab.className = 'tab' + (index === 0 ? ' active' : '');
+                tab.textContent = tool.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                tab.onclick = () => activateTab(index);
+                tabsContainer.appendChild(tab);
+
+                // Create panel
+                const panel = document.createElement('div');
+                panel.className = 'tool-panel' + (index === 0 ? ' active' : '');
+                panel.id = `panel_${tool.name}`;
+                panel.innerHTML = renderToolPanel(tool);
+                contentContainer.appendChild(panel);
+            });
+
+            // Attach form handlers
+            state.tools.forEach(tool => {
+                const form = document.getElementById(`form_${tool.name}`);
+                if (form) {
+                    form.onsubmit = (e) => handleToolSubmit(e, tool);
+                }
+            });
+        }
+
+        // Render Tool Panel
+        function renderToolPanel(tool) {
+            const schema = tool.inputSchema;
+            let html = `
+                <div class="tool-description">
+                    <p>${tool.description}</p>
+                </div>
+                <form id="form_${tool.name}">
+            `;
+
+            // Generate form fields from schema
+            for (const [propName, propSchema] of Object.entries(schema.properties || {})) {
+                const required = (schema.required || []).includes(propName);
+                html += renderFormField(propName, propSchema, required);
+            }
+
+            html += `
+                    <button type="submit">Execute Tool</button>
+                </form>
+                <div id="result_${tool.name}"></div>
+            `;
+
+            return html;
+        }
+
+        // Render Form Field
+        function renderFormField(name, schema, required) {
+            const label = schema.description || name;
+            const id = `input_${name}`;
+
+            if (schema.type === 'string' && schema.enum) {
+                return `
+                    <div class="form-group">
+                        <label for="${id}">${label}${required ? ' *' : ''}</label>
+                        <select id="${id}" name="${name}" ${required ? 'required' : ''}>
+                            ${schema.enum.map(val => `<option value="${val}">${val}</option>`).join('')}
+                        </select>
+                    </div>
+                `;
+            } else if (schema.type === 'array' && schema.items?.type === 'string') {
+                return `
+                    <div class="form-group">
+                        <label for="${id}">${label}${required ? ' *' : ''}</label>
+                        <textarea id="${id}" name="${name}" ${required ? 'required' : ''} placeholder="${schema.description || ''}"></textarea>
+                        <small style="color: #666;">One item per line</small>
+                    </div>
+                `;
+            } else if (schema.type === 'number') {
+                return `
+                    <div class="form-group">
+                        <label for="${id}">${label}${required ? ' *' : ''}</label>
+                        <input type="number" id="${id}" name="${name}" ${required ? 'required' : ''}
+                            ${schema.minimum !== undefined ? `min="${schema.minimum}"` : ''}
+                            ${schema.maximum !== undefined ? `max="${schema.maximum}"` : ''}
+                            value="${schema.default || ''}">
+                    </div>
+                `;
+            } else if (schema.type === 'boolean') {
+                return `
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="${id}" name="${name}" ${schema.default ? 'checked' : ''}>
+                            ${label}
+                        </label>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="form-group">
+                        <label for="${id}">${label}${required ? ' *' : ''}</label>
+                        <input type="text" id="${id}" name="${name}" ${required ? 'required' : ''} placeholder="${schema.description || ''}">
+                    </div>
+                `;
+            }
+        }
+
+        // Handle Tool Submit
+        async function handleToolSubmit(event, tool) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const args = {};
+
+            // Build arguments from form data
+            for (const [propName, propSchema] of Object.entries(tool.inputSchema.properties || {})) {
+                const value = formData.get(propName);
+
+                if (propSchema.type === 'array') {
+                    args[propName] = value ? value.split('\n').filter(v => v.trim()) : [];
+                } else if (propSchema.type === 'number') {
+                    args[propName] = value ? parseFloat(value) : propSchema.default;
+                } else if (propSchema.type === 'boolean') {
+                    args[propName] = form.elements[propName].checked;
+                } else if (value) {
+                    args[propName] = value;
+                }
+            }
+
+            showLoading(true);
+
+            try {
+                const response = await sendMCPRequest('tools/call', {
+                    name: tool.name,
+                    arguments: args
+                });
+
+                displayResult(`result_${tool.name}`, response.result.content[0].text);
+            } catch (error) {
+                displayResult(`result_${tool.name}`, error.message, true);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Display Result
+        function displayResult(containerId, text, isError = false) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `
+                <div class="result-container">
+                    <h3>Result</h3>
+                    ${isError ? `<div class="error">${text}</div>` : `<pre>${text}</pre>`}
+                </div>
+            `;
+        }
+
+        // Activate Tab
+        function activateTab(index) {
+            document.querySelectorAll('.tab').forEach((tab, i) => {
+                tab.classList.toggle('active', i === index);
+            });
+            document.querySelectorAll('.tool-panel').forEach((panel, i) => {
+                panel.classList.toggle('active', i === index);
+            });
+        }
+
+        // Update Status
+        function updateStatus(text, connected) {
+            document.getElementById('statusText').textContent = text;
+            document.getElementById('statusDot').classList.toggle('connected', connected);
+        }
+
+        // Show Loading
+        function showLoading(show) {
+            document.getElementById('loadingOverlay').classList.toggle('show', show);
+        }
+
+        // Show Error
+        function showError(title, error) {
+            const contentContainer = document.getElementById('contentContainer');
+            contentContainer.innerHTML = `
+                <div class="error">
+                    <h3>${title}</h3>
+                    <p>${error.message}</p>
+                    <button onclick="location.reload()">Retry</button>
+                </div>
+            `;
+        }
+
+        // Initialize on load
+        window.addEventListener('load', initializeMCP);
+
+        // Cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            if (state.eventSource) {
+                state.eventSource.close();
+            }
+        });
+    </script>
+</body>
+</html>
