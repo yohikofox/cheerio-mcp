@@ -48,7 +48,7 @@ export interface RawPageContent {
 /**
  * Estimate token count using a simple heuristic (approximately 4 chars per token)
  */
-function estimateTokenCount(text: string): number {
+export function estimateTokenCount(text: string): number {
   // Rough estimation: 1 token ≈ 4 characters for English text
   // For YAML/structured data, we use a slightly different ratio
   return Math.ceil(text.length / 3.5);

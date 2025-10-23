@@ -105,8 +105,9 @@ export async function searchGoogleWithPlaywright(
     const $ = cheerio.load(html);
     const results: SearchResult[] = [];
 
-    // Google organic results selector (excludes ads)
-    $(".g, div[data-sokoban-container]").each((_index, element) => {
+    // Google organic results selector (updated for 2025 structure)
+    // Try multiple selectors as Google changes its HTML frequently
+    $(".MjjYud, .g, div[data-sokoban-container]").each((_index, element) => {
       if (results.length >= maxResults) return false;
 
       const $element = $(element);
@@ -129,7 +130,7 @@ export async function searchGoogleWithPlaywright(
       if (!matchesAllowedDomains(linkUrl, allowedDomains, excludedDomains)) return;
 
       const title = $link.find("h3").text().trim();
-      const snippet = $element.find(".VwiC3b, .yXK7lf, .IsZvec").text().trim();
+      const snippet = $element.find(".VwiC3b, .yXK7lf, .IsZvec, .kb0PBd").text().trim();
 
       if (title && linkUrl) {
         results.push({

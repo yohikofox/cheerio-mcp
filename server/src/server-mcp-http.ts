@@ -11,11 +11,18 @@ import {
   scrapeMultiplePagesWithPlaywright,
   scrapePageWithPlaywright,
   takeScreenshotWithPlaywright,
+  estimateTokenCount,
 } from "./scraper-playwright.js";
 import {
   aggregateScrapedData,
   formatAggregatedDataAsYAML,
 } from "./aggregator.js";
+import { analyzePageStructure } from "./page-analyzer.js";
+import {
+  listDomainConfigs,
+  loadDomainConfig,
+  deleteDomainConfig,
+} from "./domain-config-manager.js";
 
 // import { scrapePageWithPlaywright } from "./scraper-playwright-test.js";
 
@@ -478,6 +485,21 @@ app.post("/mcp", async (req: Request, res: Response) => {
               },
             },
             {
+              name: "analyze_page_structure",
+              description:
+                "Analyze the structure of a product/article page to identify optimal selectors for data extraction. Returns structured data formats, suggested CSS selectors, and extraction recommendations.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  url: {
+                    type: "string",
+                    description: "The URL of the page to analyze",
+                  },
+                },
+                required: ["url"],
+              },
+            },
+            {
               name: "search_and_scrape",
               description:
                 "Search the web and scrape all result pages, then aggregate the data to remove duplicates. Returns a unified dataset from multiple sources.",
@@ -510,8 +532,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
                       type: "string",
                     },
                     description:
-                      "Optional: Filter results to only include these domains",
-                    default: ["duckduckgo.com"],
+                      "Optional: Filter results to only include these domains (leave empty to allow all domains except excluded ones)",
                   },
                   excludedDomains: {
                     type: "array",
@@ -537,6 +558,30 @@ app.post("/mcp", async (req: Request, res: Response) => {
                   },
                 },
                 required: ["query"],
+              },
+            },
+            {
+              name: "list_domain_configs",
+              description:
+                "List all saved domain configurations (learned page structures)",
+              inputSchema: {
+                type: "object",
+                properties: {},
+              },
+            },
+            {
+              name: "get_domain_config",
+              description:
+                "Get the saved configuration for a specific domain",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  domain: {
+                    type: "string",
+                    description: "Domain name (e.g., 'orange.fr' or 'boutique.orange.fr')",
+                  },
+                },
+                required: ["domain"],
               },
             },
           ],
@@ -735,6 +780,26 @@ app.post("/mcp", async (req: Request, res: Response) => {
             break;
           }
 
+          case "analyze_page_structure": {
+            const { url } = args || {};
+
+            if (!url) {
+              throw new Error("Invalid params: 'url' is required");
+            }
+
+            const analysis = await analyzePageStructure(url);
+
+            toolResult = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(analysis, null, 2),
+                },
+              ],
+            };
+            break;
+          }
+
           case "search_and_scrape": {
             const {
               query,
@@ -818,11 +883,104 @@ app.post("/mcp", async (req: Request, res: Response) => {
                 aggregatedData,
                 stats
               );
+
+              // Calculate token estimation for the output
+              const estimatedTokens = estimateTokenCount(yamlOutput);
+
+              // Add header with token estimation
+              const header = `# Search and Scrape Results
+# Query: ${query}
+# Engines: ${engines.join(', ')}
+# URLs scraped: ${urls.length}
+# Aggregated items: ${aggregatedData.length}
+# Estimated tokens: ~${estimatedTokens.toLocaleString()}
+# ================================================
+
+`;
+
               toolResult = {
                 content: [
                   {
                     type: "text",
-                    text: yamlOutput,
+                    text: header + yamlOutput,
+                  },
+                ],
+              };
+            } else {
+              const jsonOutput = JSON.stringify(
+                {
+                  query,
+                  engines,
+                  searchResults: searchResults.map((r) => ({
+                    engine: r.engine,
+                    resultCount: r.results.length,
+                  })),
+                  scrapedPages: urls.length,
+                  aggregatedData,
+                  stats,
+                },
+                null,
+                2
+              );
+
+              // Calculate token estimation for the output
+              const estimatedTokens = estimateTokenCount(jsonOutput);
+
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: `Estimated tokens: ~${estimatedTokens.toLocaleString()}\n\n${jsonOutput}`,
+                  },
+                ],
+              };
+            }
+            break;
+          }
+
+          case "list_domain_configs": {
+            const domains = await listDomainConfigs();
+
+            toolResult = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      count: domains.length,
+                      domains: domains.sort(),
+                    },
+                    null,
+                    2
+                  ),
+                },
+              ],
+            };
+            break;
+          }
+
+          case "get_domain_config": {
+            const { domain } = args || {};
+
+            if (!domain) {
+              throw new Error("Invalid params: 'domain' is required");
+            }
+
+            const config = await loadDomainConfig(domain);
+
+            if (!config) {
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(
+                      {
+                        error: `No configuration found for domain: ${domain}`,
+                        suggestion: "Use 'analyze_page_structure' tool to learn this domain first",
+                      },
+                      null,
+                      2
+                    ),
                   },
                 ],
               };
@@ -831,21 +989,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
                 content: [
                   {
                     type: "text",
-                    text: JSON.stringify(
-                      {
-                        query,
-                        engines,
-                        searchResults: searchResults.map((r) => ({
-                          engine: r.engine,
-                          resultCount: r.results.length,
-                        })),
-                        scrapedPages: urls.length,
-                        aggregatedData,
-                        stats,
-                      },
-                      null,
-                      2
-                    ),
+                    text: JSON.stringify(config, null, 2),
                   },
                 ],
               };
