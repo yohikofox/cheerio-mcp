@@ -495,6 +495,11 @@ app.post("/mcp", async (req: Request, res: Response) => {
                     type: "string",
                     description: "The URL of the page to analyze",
                   },
+                  interactionSelectors: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Optional: CSS selectors of elements to click on during analysis (e.g., accordion triggers to reveal hidden content). These will be saved in the domain config for future use.",
+                  },
                 },
                 required: ["url"],
               },
@@ -781,13 +786,13 @@ app.post("/mcp", async (req: Request, res: Response) => {
           }
 
           case "analyze_page_structure": {
-            const { url } = args || {};
+            const { url, interactionSelectors } = args || {};
 
             if (!url) {
               throw new Error("Invalid params: 'url' is required");
             }
 
-            const analysis = await analyzePageStructure(url);
+            const analysis = await analyzePageStructure(url, interactionSelectors);
 
             toolResult = {
               content: [

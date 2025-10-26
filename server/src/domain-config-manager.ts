@@ -2,30 +2,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { URL } from 'url';
 
-export interface DomainConfig {
-  domain: string;
-  learnedAt: string;
-  lastUsed: string;
-  sampleUrl: string;
-  selectors: {
-    title?: string[];
-    price?: string[];
-    images?: string[];
-    description?: string[];
-    specifications?: SpecificationSelector[];
-    brand?: string[];
-    sku?: string[];
-    availability?: string[];
-    rating?: string[];
-  };
-  structuredData?: {
-    hasJsonLd: boolean;
-    jsonLdTypes?: string[];
-    hasMicrodata: boolean;
-    microdataTypes?: string[];
-  };
-  extractionStrategy: 'structured' | 'selectors' | 'hybrid';
-  notes?: string[];
+export interface SelectorMatch {
+  selector: string;
+  confidence: 'high' | 'medium' | 'low';
+  value: string;
+  method: string;
 }
 
 export interface SpecificationSelector {
@@ -33,6 +14,40 @@ export interface SpecificationSelector {
   selector: string;
   labelSelector?: string;
   valueSelector?: string;
+}
+
+export interface ProductInfoSelectors {
+  title?: SelectorMatch[];
+  price?: SelectorMatch[];
+  images?: SelectorMatch[];
+  description?: SelectorMatch[];
+  specifications?: SelectorMatch[];
+  brand?: SelectorMatch[];
+  sku?: SelectorMatch[];
+  availability?: SelectorMatch[];
+  rating?: SelectorMatch[];
+}
+
+export interface AccordionContent {
+  trigger: string;
+  selector: string;
+  content: string;
+  html: string;
+  structured?: Record<string, any>;
+  length: number;
+}
+
+export interface DomainConfig {
+  domain: string;
+  learnedAt: string;
+  lastUsed: string;
+  sampleUrl: string;
+  productInfo: ProductInfoSelectors;
+  structuredData: any[];
+  extractionStrategy: 'structured' | 'selectors' | 'hybrid';
+  recommendations: string[];
+  interactionSelectors?: string[];
+  accordionContent?: AccordionContent[];
 }
 
 const CONFIG_DIR = path.join(process.cwd(), 'domain-configs');

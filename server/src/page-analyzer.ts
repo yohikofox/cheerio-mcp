@@ -12,7 +12,18 @@ export interface PageStructureAnalysis {
     productInfo: ProductInfoSelectors;
     commonPatterns: PatternInfo[];
     recommendations: string[];
+    interactionSelectors?: string[];
+    accordionContent?: AccordionContent[];
   };
+}
+
+interface AccordionContent {
+  trigger: string;
+  selector: string;
+  content: string;
+  html: string;
+  structured?: Record<string, any>;
+  length: number;
 }
 
 interface StructuredDataInfo {
@@ -49,7 +60,10 @@ interface PatternInfo {
 /**
  * Analyze a page structure to identify optimal selectors for data extraction
  */
-export async function analyzePageStructure(url: string): Promise<PageStructureAnalysis> {
+export async function analyzePageStructure(
+  url: string,
+  interactionSelectors?: string[]
+): Promise<PageStructureAnalysis> {
   let page: Page | undefined;
 
   try {
@@ -66,14 +80,206 @@ export async function analyzePageStructure(url: string): Promise<PageStructureAn
       timeout: 30000,
     });
 
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
-      console.log('[Page Analyzer] Network idle timeout');
+    // Try to wait for network idle but don't block if trackers fail
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
+      console.log('[Page Analyzer] Network idle timeout - continuing anyway (normal for sites with many trackers)');
     });
 
-    await page.waitForTimeout(2000);
+    // Give a bit more time for initial render
+    await page.waitForTimeout(1000);
 
-    // Get the HTML
+    // Close any blocking popups/modals/overlays
+    console.log('[Page Analyzer] Checking for blocking popups/modals...');
+
+    const closeButtonSelectors = [
+      // Generic close buttons
+      '[aria-label*="Close" i]',
+      '[aria-label*="Fermer" i]',
+      'button.close',
+      'button[class*="close"]',
+      '[data-dismiss="modal"]',
+      '[data-dismiss="dialog"]',
+      '.modal-close',
+      '.popup-close',
+      '.dialog-close',
+      // Icons and symbols
+      'button:has(svg[class*="close"])',
+      'button:has([class*="close-icon"])',
+      '[class*="close-button"]',
+      // Refuse/decline buttons for popups
+      'button:has-text("Non merci")',
+      'button:has-text("Refuser")',
+      'button:has-text("Plus tard")',
+      'button:has-text("Continuer sans")',
+    ];
+
+    for (const selector of closeButtonSelectors) {
+      try {
+        const closeButton = await page.$(selector);
+        if (closeButton) {
+          const isVisible = await closeButton.isVisible();
+          if (isVisible) {
+            console.log(`[Page Analyzer] Found and clicking close button: ${selector}`);
+            await closeButton.click();
+            await page.waitForTimeout(500);
+          }
+        }
+      } catch (err) {
+        // Button might not exist or not be clickable, continue
+      }
+    }
+
+    // Press Escape key to close any remaining modals
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+
+    console.log('[Page Analyzer] Popup handling completed');
+
+    // Human-like progressive scrolling to load lazy content FIRST
+    console.log('[Page Analyzer] Starting scroll to load dynamic content...');
+
+    const pageInfo = await page.evaluate(() => ({
+      height: document.body.scrollHeight,
+      viewportHeight: window.innerHeight
+    }));
+
+    console.log(`[Page Analyzer] Page height: ${pageInfo.height}, Viewport: ${pageInfo.viewportHeight}`);
+
+    // Scroll down progressively with timeout protection
+    const scrollStepMin = 800;  // Increased for faster scrolling
+    const scrollStepMax = 1200;
+    let currentY = 0;
+    const maxScrollTime = 30000; // Max 30 seconds for scrolling
+    const scrollStartTime = Date.now();
+
+    while (currentY < pageInfo.height) {
+      // Check timeout
+      if (Date.now() - scrollStartTime > maxScrollTime) {
+        console.log(`[Page Analyzer] Scroll timeout reached after 30s, stopping at ${currentY}px`);
+        break;
+      }
+
+      const step = Math.floor(Math.random() * (scrollStepMax - scrollStepMin + 1)) + scrollStepMin;
+      currentY += step;
+
+      await page.evaluate((y) => {
+        window.scrollTo({ top: y, behavior: 'auto' }); // Changed to 'auto' for faster scroll
+      }, currentY);
+
+      await page.waitForTimeout(50); // Reduced delay
+
+      const newHeight = await page.evaluate(() => document.body.scrollHeight);
+      if (newHeight > pageInfo.height) {
+        pageInfo.height = newHeight;
+        console.log(`[Page Analyzer] Content expanded to ${newHeight}px`);
+      }
+    }
+
+    await page.waitForTimeout(300); // Reduced final wait
+
+    // Scroll back to top
+    await page.evaluate(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    await page.waitForTimeout(300);
+    console.log('[Page Analyzer] Scrolling completed');
+
+    // Click on custom interaction selectors provided by user AFTER scrolling
+    const accordionContents: AccordionContent[] = [];
+
+    if (interactionSelectors && interactionSelectors.length > 0) {
+      console.log(`[Page Analyzer] Processing ${interactionSelectors.length} custom interaction selectors...`);
+
+      // Capture HTML before interactions for comparison
+      const htmlBefore = await page.content();
+      console.log(`[Page Analyzer] HTML size BEFORE interactions: ${htmlBefore.length} characters`);
+
+      for (const selector of interactionSelectors) {
+        try {
+          const elements = await page.$$(selector);
+          if (elements.length > 0) {
+            console.log(`[Page Analyzer] Found ${elements.length} elements matching: ${selector}`);
+
+            for (let i = 0; i < Math.min(elements.length, 20); i++) {
+              try {
+                // Check if element is visible and enabled
+                const isVisible = await elements[i].isVisible();
+                const isEnabled = await elements[i].isEnabled();
+                const ariaExpanded = await elements[i].getAttribute('aria-expanded');
+                const ariaControls = await elements[i].getAttribute('aria-controls');
+                const triggerText = await elements[i].textContent();
+
+                console.log(`[Page Analyzer] Element ${i + 1}: visible=${isVisible}, enabled=${isEnabled}, aria-expanded=${ariaExpanded}, aria-controls=${ariaControls}`);
+
+                // Only click if accordion is NOT already expanded
+                if (ariaExpanded === 'false' || ariaExpanded === null) {
+                  await elements[i].scrollIntoViewIfNeeded();
+                  await page.waitForTimeout(300);
+
+                  await elements[i].click();
+                  console.log(`[Page Analyzer] Clicked element ${i + 1}/${elements.length} to OPEN accordion`);
+
+                  // Wait for accordion to open with animation
+                  await page.waitForTimeout(1500);
+                } else if (ariaExpanded === 'true') {
+                  console.log(`[Page Analyzer] Element ${i + 1} is already expanded, skipping click`);
+                }
+
+                // Extract accordion content if aria-controls is present
+                if (ariaControls) {
+                  try {
+                    const contentPanel = await page.$(`#${ariaControls}`);
+                    if (contentPanel) {
+                      // Get HTML to parse structure
+                      const innerHTML = await contentPanel.innerHTML();
+                      const textContent = await contentPanel.textContent();
+
+                      if (textContent && textContent.trim().length > 0) {
+                        // Parse HTML structure for structured data
+                        const $panel = cheerio.load(innerHTML);
+                        const structured = parseAccordionStructure($panel);
+
+                        accordionContents.push({
+                          trigger: triggerText?.trim() || 'Unknown',
+                          selector: `#${ariaControls}`,
+                          content: textContent.trim(),
+                          html: innerHTML,
+                          structured: Object.keys(structured).length > 0 ? structured : undefined,
+                          length: textContent.trim().length
+                        });
+                        console.log(`[Page Analyzer] Extracted ${textContent.trim().length} chars and ${Object.keys(structured).length} structured fields from #${ariaControls}`);
+                      }
+                    }
+                  } catch (extractErr) {
+                    console.log(`[Page Analyzer] Could not extract content from #${ariaControls}`);
+                  }
+                }
+              } catch (clickErr) {
+                console.log(`[Page Analyzer] Could not process element ${i + 1} for selector ${selector}:`, clickErr);
+              }
+            }
+          } else {
+            console.log(`[Page Analyzer] No elements found for selector: ${selector}`);
+          }
+        } catch (err) {
+          console.log(`[Page Analyzer] Error processing selector ${selector}:`, err);
+        }
+      }
+
+      await page.waitForTimeout(2000);
+
+      // Capture HTML after interactions
+      const htmlAfter = await page.content();
+      console.log(`[Page Analyzer] HTML size AFTER interactions: ${htmlAfter.length} characters`);
+      console.log(`[Page Analyzer] HTML size difference: ${htmlAfter.length - htmlBefore.length} characters`);
+      console.log(`[Page Analyzer] Extracted content from ${accordionContents.length} accordions`);
+      console.log('[Page Analyzer] Custom interactions completed');
+    }
+
+    // Get the HTML after scrolling and interactions
     const html = await page.content();
+    console.log(`[Page Analyzer] Final HTML captured: ${html.length} characters`);
     const $ = cheerio.load(html);
 
     // Extract page title
@@ -98,7 +304,9 @@ export async function analyzePageStructure(url: string): Promise<PageStructureAn
       url,
       structuredData,
       productInfo,
-      recommendations
+      recommendations,
+      interactionSelectors,
+      accordionContents
     );
     await saveDomainConfig(domainConfig);
 
@@ -110,6 +318,8 @@ export async function analyzePageStructure(url: string): Promise<PageStructureAn
         productInfo,
         commonPatterns,
         recommendations,
+        interactionSelectors,
+        accordionContent: accordionContents.length > 0 ? accordionContents : undefined,
       },
     };
   } catch (error) {
@@ -127,7 +337,9 @@ function convertToDomainConfig(
   url: string,
   structuredData: StructuredDataInfo[],
   productInfo: ProductInfoSelectors,
-  recommendations: string[]
+  recommendations: string[],
+  interactionSelectors?: string[],
+  accordionContents?: AccordionContent[]
 ): DomainConfig {
   const urlObj = new URL(url);
   const domain = urlObj.hostname.replace(/^www\./, '');
@@ -144,59 +356,78 @@ function convertToDomainConfig(
     extractionStrategy = 'structured';
   }
 
-  // Extract best selectors (highest confidence)
+  // Save complete productInfo with all details (no filtering)
   const config: DomainConfig = {
     domain,
     learnedAt: new Date().toISOString(),
     lastUsed: new Date().toISOString(),
     sampleUrl: url,
-    selectors: {
-      title: productInfo.title
-        ?.filter(t => t.confidence === 'high')
-        .map(t => t.selector)
-        .slice(0, 3) || [],
-      price: productInfo.price
-        ?.filter(p => p.confidence === 'high')
-        .map(p => p.selector)
-        .slice(0, 3) || [],
-      images: productInfo.images
-        ?.filter(i => i.confidence === 'high')
-        .map(i => i.selector)
-        .slice(0, 3) || [],
-      brand: productInfo.brand
-        ?.filter(b => b.confidence === 'high')
-        .map(b => b.selector)
-        .slice(0, 2) || [],
-      sku: productInfo.sku
-        ?.filter(s => s.confidence === 'high')
-        .map(s => s.selector)
-        .slice(0, 2) || [],
-      availability: productInfo.availability
-        ?.map(a => a.selector)
-        .slice(0, 2) || [],
-      specifications: productInfo.specifications
-        ?.map(s => ({
-          type: s.method.includes('Table') ? 'table' as const :
-                s.method.includes('Definition') ? 'dl' as const : 'div-pairs' as const,
-          selector: s.selector,
-        }))
-        .slice(0, 2) || [],
-    },
-    structuredData: {
-      hasJsonLd,
-      jsonLdTypes: structuredData
-        .filter(d => d.format === 'json-ld')
-        .map(d => d.type),
-      hasMicrodata,
-      microdataTypes: structuredData
-        .filter(d => d.format === 'microdata')
-        .map(d => d.type),
-    },
+    productInfo: productInfo, // Keep all selectors with confidence, values, methods
+    structuredData: structuredData, // Keep complete structured data
     extractionStrategy,
-    notes: recommendations,
+    recommendations: recommendations,
+    interactionSelectors: interactionSelectors, // Custom selectors for revealing hidden content
+    accordionContent: accordionContents && accordionContents.length > 0 ? accordionContents : undefined,
   };
 
   return config;
+}
+
+/**
+ * Parse accordion HTML content to extract structured data
+ */
+function parseAccordionStructure($: cheerio.CheerioAPI): Record<string, any> {
+  const result: Record<string, any> = {};
+
+  // Parse tables with key-value pairs
+  $('table').each((_, table) => {
+    const $table = $(table);
+
+    $table.find('tr').each((_, row) => {
+      const $row = $(row);
+      const cells = $row.find('td, th').toArray();
+
+      if (cells.length >= 2) {
+        const key = $(cells[0]).text().trim();
+        const value = $(cells[1]).text().trim();
+
+        if (key && value) {
+          result[key] = value;
+        }
+      }
+    });
+  });
+
+  // Parse definition lists (dl/dt/dd)
+  $('dl').each((_, dl) => {
+    const $dl = $(dl);
+    $dl.find('dt').each((_, dt) => {
+      const key = $(dt).text().trim();
+      const $dd = $(dt).next('dd');
+      const value = $dd.text().trim();
+
+      if (key && value) {
+        result[key] = value;
+      }
+    });
+  });
+
+  // Parse divs with label/value patterns
+  $('[class*="label"], [class*="key"]').each((_, label) => {
+    const $label = $(label);
+    const key = $label.text().trim();
+
+    // Try to find value in next sibling
+    const $value = $label.next();
+    if ($value.length > 0) {
+      const value = $value.text().trim();
+      if (key && value && !key.includes(':')) {
+        result[key] = value;
+      }
+    }
+  });
+
+  return result;
 }
 
 /**
