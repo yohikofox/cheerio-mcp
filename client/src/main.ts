@@ -177,6 +177,24 @@ function renderFormField(name: string, schema: any, required: boolean): string {
         </label>
       </div>
     `;
+  } else if (schema.type === 'string' && name.toLowerCase().includes('json')) {
+    // Special handling for JSON fields (like configJson) - render as large textarea
+    return `
+      <div class="form-group">
+        <label for="${id}">${label}${required ? ' *' : ''}</label>
+        <textarea id="${id}" name="${name}" ${required ? 'required' : ''} placeholder="${schema.description || 'Enter valid JSON string'}" style="min-height: 300px; font-family: 'Courier New', monospace; font-size: 13px;"></textarea>
+        <small>💡 Tip: Copy JSON from get_domain_config, edit it here, then save</small>
+      </div>
+    `;
+  } else if (schema.type === 'object') {
+    // Handle object type - render as textarea for JSON input
+    return `
+      <div class="form-group">
+        <label for="${id}">${label}${required ? ' *' : ''}</label>
+        <textarea id="${id}" name="${name}" ${required ? 'required' : ''} placeholder="${schema.description || 'Enter valid JSON object'}" style="min-height: 200px; font-family: 'Courier New', monospace; font-size: 13px;"></textarea>
+        <small>Enter as JSON object</small>
+      </div>
+    `;
   } else {
     return `
       <div class="form-group">
@@ -205,6 +223,21 @@ async function handleToolSubmit(event: Event, tool: MCPTool) {
       args[name] = value ? parseFloat(value as string) : propSchema.default;
     } else if (propSchema.type === 'boolean') {
       args[name] = (form.elements.namedItem(name) as HTMLInputElement).checked;
+    } else if (propSchema.type === 'object' && value) {
+      // Parse object fields as JSON
+      try {
+        args[name] = JSON.parse(value as string);
+      } catch (e) {
+        // If parsing fails, show error
+        const resultContainer = document.getElementById(`result-${tool.name}`)!;
+        resultContainer.innerHTML = `
+          <div class="error">
+            <h3>Invalid JSON</h3>
+            <p>The field "${name}" contains invalid JSON. Please check your syntax.</p>
+          </div>
+        `;
+        return;
+      }
     } else if (value) {
       args[name] = value;
     } else if (propSchema.default !== undefined) {

@@ -182,3 +182,68 @@ export async function hasDomainConfig(urlOrDomain: string): Promise<boolean> {
   const config = await loadDomainConfig(urlOrDomain);
   return config !== null;
 }
+
+/**
+ * Update specific fields of an existing domain configuration
+ */
+export async function updateDomainConfig(
+  urlOrDomain: string,
+  updates: Partial<DomainConfig>,
+  mergeMode: 'merge' | 'replace' = 'merge'
+): Promise<DomainConfig> {
+  // Load existing config
+  const existingConfig = await loadDomainConfig(urlOrDomain);
+
+  if (!existingConfig) {
+    throw new Error(`No configuration found for domain: ${urlOrDomain}`);
+  }
+
+  let updatedConfig: DomainConfig;
+
+  if (mergeMode === 'replace') {
+    // Replace mode: keep only domain, learnedAt, sampleUrl from existing, replace everything else
+    updatedConfig = {
+      domain: existingConfig.domain,
+      learnedAt: existingConfig.learnedAt,
+      sampleUrl: existingConfig.sampleUrl,
+      lastUsed: new Date().toISOString(),
+      productInfo: updates.productInfo || {},
+      structuredData: updates.structuredData || [],
+      extractionStrategy: updates.extractionStrategy || 'selectors',
+      recommendations: updates.recommendations || [],
+      interactionSelectors: updates.interactionSelectors,
+      accordionContent: updates.accordionContent,
+    };
+  } else {
+    // Merge mode: deep merge of updates into existing config
+    updatedConfig = {
+      ...existingConfig,
+      ...updates,
+      lastUsed: new Date().toISOString(),
+      // Deep merge productInfo if provided
+      productInfo: updates.productInfo
+        ? { ...existingConfig.productInfo, ...updates.productInfo }
+        : existingConfig.productInfo,
+      // Merge arrays if provided, otherwise keep existing
+      structuredData: updates.structuredData !== undefined
+        ? updates.structuredData
+        : existingConfig.structuredData,
+      recommendations: updates.recommendations !== undefined
+        ? updates.recommendations
+        : existingConfig.recommendations,
+      interactionSelectors: updates.interactionSelectors !== undefined
+        ? updates.interactionSelectors
+        : existingConfig.interactionSelectors,
+      accordionContent: updates.accordionContent !== undefined
+        ? updates.accordionContent
+        : existingConfig.accordionContent,
+    };
+  }
+
+  // Save updated config
+  await saveDomainConfig(updatedConfig);
+
+  console.log(`[DomainConfig] Updated config for ${updatedConfig.domain} (mode: ${mergeMode})`);
+
+  return updatedConfig;
+}

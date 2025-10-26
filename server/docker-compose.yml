@@ -13,6 +13,8 @@ services:
       - DISPLAY=:99
       - NODE_ENV=production
       - PLAYWRIGHT_HEADLESS=false
+    volumes:
+      - ./data:/app/domain-configs
     restart: unless-stopped
     stdin_open: true
     tty: true

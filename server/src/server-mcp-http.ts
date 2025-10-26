@@ -22,6 +22,7 @@ import {
   listDomainConfigs,
   loadDomainConfig,
   deleteDomainConfig,
+  updateDomainConfig,
 } from "./domain-config-manager.js";
 
 // import { scrapePageWithPlaywright } from "./scraper-playwright-test.js";
@@ -589,6 +590,64 @@ app.post("/mcp", async (req: Request, res: Response) => {
                 required: ["domain"],
               },
             },
+            {
+              name: "update_domain_config",
+              description:
+                "Update an existing domain configuration with edited schema/selectors. Supports two modes: 1) Partial updates with 'updates' object, 2) Full config replacement with 'configJson' string (ideal for textarea editing workflow).",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  domain: {
+                    type: "string",
+                    description: "Domain name (e.g., 'cdiscount.com' or 'boutique.orange.fr')",
+                  },
+                  updates: {
+                    type: "object",
+                    description: "Partial configuration to update (any DomainConfig fields). Ignored if configJson is provided.",
+                    properties: {
+                      productInfo: {
+                        type: "object",
+                        description: "Product information selectors (title, price, images, etc.)",
+                      },
+                      structuredData: {
+                        type: "array",
+                        description: "Structured data information (JSON-LD, Microdata, OpenGraph)",
+                      },
+                      extractionStrategy: {
+                        type: "string",
+                        enum: ["structured", "selectors", "hybrid"],
+                        description: "Strategy to use for extraction",
+                      },
+                      recommendations: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Updated recommendations for extraction",
+                      },
+                      interactionSelectors: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "CSS selectors for interactions (accordions, etc.)",
+                      },
+                      accordionContent: {
+                        type: "array",
+                        description: "Accordion content configuration",
+                      },
+                    },
+                  },
+                  configJson: {
+                    type: "string",
+                    description: "Complete configuration as JSON string (from textarea editing). When provided, replaces the entire config. Use with get_domain_config to retrieve, edit, and save back.",
+                  },
+                  mergeMode: {
+                    type: "string",
+                    enum: ["merge", "replace"],
+                    description: "How to apply updates: 'merge' (default) combines with existing, 'replace' overwrites all except domain/learnedAt/sampleUrl. Only used when 'updates' is provided.",
+                    default: "merge",
+                  },
+                },
+                required: ["domain"],
+              },
+            },
           ],
         };
         break;
@@ -995,6 +1054,109 @@ app.post("/mcp", async (req: Request, res: Response) => {
                   {
                     type: "text",
                     text: JSON.stringify(config, null, 2),
+                  },
+                ],
+              };
+            }
+            break;
+          }
+
+          case "update_domain_config": {
+            const { domain, updates, configJson, mergeMode = "merge" } = args || {};
+
+            if (!domain) {
+              throw new Error("Invalid params: 'domain' is required");
+            }
+
+            try {
+              let updatedConfig;
+
+              // Mode 1: Full config replacement from JSON string (textarea mode)
+              if (configJson) {
+                try {
+                  const parsedConfig = JSON.parse(configJson);
+
+                  // Validate required fields
+                  if (!parsedConfig.productInfo || !parsedConfig.structuredData || !parsedConfig.extractionStrategy) {
+                    throw new Error("Invalid config JSON: missing required fields (productInfo, structuredData, extractionStrategy)");
+                  }
+
+                  // Use replace mode with parsed config
+                  updatedConfig = await updateDomainConfig(
+                    domain,
+                    parsedConfig,
+                    'replace'
+                  );
+
+                  toolResult = {
+                    content: [
+                      {
+                        type: "text",
+                        text: JSON.stringify(
+                          {
+                            success: true,
+                            message: "Domain configuration replaced successfully from JSON string",
+                            mode: "configJson (full replacement)",
+                            domain: updatedConfig.domain,
+                            lastUsed: updatedConfig.lastUsed,
+                            config: updatedConfig,
+                          },
+                          null,
+                          2
+                        ),
+                      },
+                    ],
+                  };
+                } catch (parseError) {
+                  throw new Error(`Failed to parse configJson: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+                }
+              }
+              // Mode 2: Partial updates (original behavior)
+              else if (updates) {
+                updatedConfig = await updateDomainConfig(
+                  domain,
+                  updates,
+                  mergeMode as 'merge' | 'replace'
+                );
+
+                toolResult = {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify(
+                        {
+                          success: true,
+                          message: `Domain configuration updated successfully (mode: ${mergeMode})`,
+                          mode: mergeMode,
+                          domain: updatedConfig.domain,
+                          lastUsed: updatedConfig.lastUsed,
+                          config: updatedConfig,
+                        },
+                        null,
+                        2
+                      ),
+                    },
+                  ],
+                };
+              }
+              // Neither configJson nor updates provided
+              else {
+                throw new Error("Invalid params: either 'configJson' or 'updates' is required");
+              }
+            } catch (error) {
+              toolResult = {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(
+                      {
+                        success: false,
+                        error: error instanceof Error ? error.message : String(error),
+                        suggestion: "Make sure the domain exists. Use 'get_domain_config' to check, or 'analyze_page_structure' to create it first.",
+                      },
+                      null,
+                      2
+                    ),
                   },
                 ],
               };
