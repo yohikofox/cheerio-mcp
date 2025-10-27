@@ -62,10 +62,11 @@ Create the name of the service account to use
 {{/*
 Generate the MCP server URL for client configuration
 Uses Kubernetes internal DNS to build the URL based on service name, namespace, and port
+If serviceName is not provided, defaults to release name with '-server' suffix
 */}}
 {{- define "web-search-mcp.mcpServerUrl" -}}
 {{- $protocol := .Values.client.server.protocol | default "http" -}}
-{{- $serviceName := .Values.client.server.serviceName | required "client.server.serviceName is required when appType is client" -}}
+{{- $serviceName := .Values.client.server.serviceName | default (printf "%s-server" .Release.Name) -}}
 {{- $port := .Values.client.server.port | default 3000 -}}
 {{- if .Values.client.server.namespace -}}
 {{- printf "%s://%s.%s.svc.cluster.local:%d" $protocol $serviceName .Values.client.server.namespace (int $port) -}}

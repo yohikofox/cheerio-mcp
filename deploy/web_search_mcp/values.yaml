@@ -90,7 +90,7 @@ service:
   port: 80
   # Target port - adjust based on appType:
   # - server: 3000 (Node.js MCP server)
-  # - client: 80 (nginx)
+  # - client: 8080 (nginx running as non-root)
   targetPort: 3000
   annotations: {}
 
@@ -377,10 +377,12 @@ server:
 
 client:
   # Server connection configuration
-  # When deploying with appType: client, specify the server service name
-  # The MCP_SERVER_URL will be auto-generated using Kubernetes DNS
+  # When deploying with appType: client, the MCP_SERVER_URL will be auto-generated using Kubernetes DNS
   server:
-    # Name of the server service (required when appType: client)
+    # Name of the server service
+    # If empty, defaults to: <release-name>-server
+    # Example: if you deploy client with "helm install my-client", it will use "my-client-server"
+    # Override this if your server has a different name
     serviceName: ""
     # Namespace where the server is deployed (empty = same namespace)
     namespace: ""

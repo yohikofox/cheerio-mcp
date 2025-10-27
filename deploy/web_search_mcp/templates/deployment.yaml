@@ -65,7 +65,7 @@ spec:
         - name: DISPLAY
           value: ":99"
         {{- end }}
-        {{- if and (eq .Values.appType "client") .Values.client.server.serviceName }}
+        {{- if eq .Values.appType "client" }}
         - name: MCP_SERVER_URL
           value: {{ include "web-search-mcp.mcpServerUrl" . | quote }}
         {{- end }}

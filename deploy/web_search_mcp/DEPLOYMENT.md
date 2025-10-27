@@ -5,7 +5,7 @@ Guide de déploiement du serveur et client MCP sur Kubernetes avec Helm.
 ## Architecture
 
 - **Serveur** : API MCP avec Playwright (port 3000) + VNC (ports 5900, 6080)
-- **Client** : Interface web statique servie par nginx (port 80)
+- **Client** : Interface web statique servie par nginx (port 8080, exposé via Service sur port 80)
 - **Communication** : Le client se connecte au serveur via le DNS interne Kubernetes
 
 ## Prérequis
@@ -135,7 +135,12 @@ helm install cheerio-mcp-server ./deploy/web_search_mcp \
 
 ### Configuration automatique avec DNS Kubernetes
 
-Le client peut se configurer automatiquement pour pointer vers le serveur en utilisant le DNS interne de Kubernetes.
+Le client se configure automatiquement pour pointer vers le serveur en utilisant le DNS interne de Kubernetes.
+
+**Auto-découverte du serveur :**
+- Si `client.server.serviceName` est vide, le helper utilise : `<release-name>-server`
+- Exemple : `helm install my-app` → cherchera le serveur `my-app-server`
+- Vous pouvez override avec un nom personnalisé si nécessaire
 
 ### Option 1 : Helm direct
 
@@ -145,7 +150,7 @@ helm install cheerio-mcp-client ./deploy/web_search_mcp \
   --set appType=client \
   --set image.repository=registry.example.local/cheerio-mcp-client \
   --set image.tag=latest \
-  --set service.targetPort=80 \
+  --set service.targetPort=8080 \
   --set client.server.serviceName=cheerio-mcp-server \
   --set client.server.port=3000 \
   --set client.server.protocol=http \
@@ -169,7 +174,7 @@ image:
   pullPolicy: Always
 
 service:
-  targetPort: 80
+  targetPort: 8080
 
 client:
   server:
