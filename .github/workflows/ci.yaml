@@ -58,7 +58,7 @@ jobs:
           push: true
           cache-from: type=gha,scope=server
           cache-to: type=gha,mode=max,scope=server
-          file: "server/Dockerfile"
+          file: "Dockerfile"
           context: "{{defaultContext}}:server"
           tags: |
             ${{ secrets.REGISTRY_SERVER }}/cheerio-mcp-server:${{ github.sha }}
@@ -102,7 +102,7 @@ jobs:
           push: true
           cache-from: type=gha,scope=client
           cache-to: type=gha,mode=max,scope=client
-          file: "client/Dockerfile"
+          file: "Dockerfile"
           context: "{{defaultContext}}:client"
           tags: |
             ${{ secrets.REGISTRY_SERVER }}/cheerio-mcp-client:${{ github.sha }}
