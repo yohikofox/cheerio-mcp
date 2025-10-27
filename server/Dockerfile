@@ -1,5 +1,8 @@
 FROM node:20-bullseye
 
+# Build argument to determine environment (development or production)
+ARG BUILD_ENV=production
+
 # Install dependencies for GUI, VNC and Playwright
 RUN apt-get update && apt-get install -y \
     # Virtual display and VNC
@@ -52,10 +55,63 @@ RUN npx playwright install-deps chromium
 ENV DISPLAY=:99
 ENV NODE_ENV=production
 
-# Create supervisor configuration
-RUN echo '[supervisord]\n\
+# Create directories and set permissions for non-root user
+RUN mkdir -p /var/log/supervisor /var/run && \
+    chmod 777 /var/log/supervisor /var/run
+
+# Create supervisor configuration based on BUILD_ENV
+RUN if [ "$BUILD_ENV" = "development" ]; then \
+      # Development: logs go to files for easier debugging \
+      echo '[supervisord]\n\
 nodaemon=true\n\
 logfile=/var/log/supervisor/supervisord.log\n\
+pidfile=/var/run/supervisord.pid\n\
+loglevel=debug\n\
+\n\
+[program:xvfb]\n\
+command=/usr/bin/Xvfb :99 -screen 0 1920x1080x24\n\
+autorestart=true\n\
+priority=100\n\
+stdout_logfile=/var/log/supervisor/xvfb.log\n\
+stderr_logfile=/var/log/supervisor/xvfb.err.log\n\
+\n\
+[program:fluxbox]\n\
+command=/usr/bin/fluxbox -display :99\n\
+autorestart=true\n\
+priority=200\n\
+environment=DISPLAY=:99\n\
+stdout_logfile=/var/log/supervisor/fluxbox.log\n\
+stderr_logfile=/var/log/supervisor/fluxbox.err.log\n\
+\n\
+[program:x11vnc]\n\
+command=/usr/bin/x11vnc -display :99 -forever -nopw -listen 0.0.0.0 -xkb -shared\n\
+autorestart=true\n\
+priority=300\n\
+stdout_logfile=/var/log/supervisor/x11vnc.log\n\
+stderr_logfile=/var/log/supervisor/x11vnc.err.log\n\
+\n\
+[program:novnc]\n\
+command=/opt/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080\n\
+autorestart=true\n\
+priority=400\n\
+stdout_logfile=/var/log/supervisor/novnc.log\n\
+stderr_logfile=/var/log/supervisor/novnc.err.log\n\
+\n\
+[program:mcp-server]\n\
+command=/bin/bash -c "sleep 5 && node /app/dist/server-mcp-http.js"\n\
+autorestart=true\n\
+priority=500\n\
+environment=DISPLAY=:99\n\
+stdout_logfile=/var/log/supervisor/mcp-server.log\n\
+stderr_logfile=/var/log/supervisor/mcp-server.err.log\n\
+' > /etc/supervisor/conf.d/supervisord.conf; \
+    else \
+      # Production: logs go to stdout/stderr for Kubernetes \
+      echo '[supervisord]\n\
+nodaemon=true\n\
+logfile=/dev/stdout\n\
+logfile_maxbytes=0\n\
+loglevel=info\n\
 pidfile=/var/run/supervisord.pid\n\
 \n\
 [program:xvfb]\n\
@@ -104,10 +160,8 @@ stdout_logfile=/dev/stdout\n\
 stdout_logfile_maxbytes=0\n\
 stderr_logfile=/dev/stderr\n\
 stderr_logfile_maxbytes=0\n\
-' > /etc/supervisor/conf.d/supervisord.conf
-
-# Create log directory for supervisor
-RUN mkdir -p /var/log/supervisor
+' > /etc/supervisor/conf.d/supervisord.conf; \
+    fi
 
 # Expose ports
 # 3000: MCP server

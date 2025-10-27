@@ -1318,12 +1318,12 @@ app.delete("/mcp", (req: Request, res: Response) => {
 
 // Cleanup expired sessions (run every 5 minutes)
 setInterval(() => {
-  const now = Date.now();
-  sessions.forEach((session, sessionId) => {
+  // TODO: Add timestamp to track when session was last used
+  // For now, we keep all sessions
+  sessions.forEach((session) => {
     // Remove sessions with no clients for more than 10 minutes
     if (session.clients.size === 0) {
-      // TODO: Add timestamp to track when session was last used
-      // For now, we keep all sessions
+      // Future implementation will remove expired sessions
     }
   });
 }, 5 * 60 * 1000);
