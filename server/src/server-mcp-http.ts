@@ -24,6 +24,7 @@ import {
   deleteDomainConfig,
   updateDomainConfig,
 } from "./domain-config-manager.js";
+import { authMiddleware } from "./middleware/auth.js";
 
 // import { scrapePageWithPlaywright } from "./scraper-playwright-test.js";
 
@@ -33,6 +34,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../public")));
+
+// Authentication middleware
+// Protects all endpoints except /health and /
+// Requires X-API-Key header with valid key from MCP_API_KEYS env var
+app.use(authMiddleware);
 
 const PORT = process.env.PORT || 3000;
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26"];

@@ -53,6 +53,23 @@ env:
   NODE_ENV: "production"
   LOG_LEVEL: "info"
 
+# API Authentication (IMPORTANT!)
+# Store API keys in Kubernetes secrets, not in this file
+# Create secret: kubectl create secret generic mcp-api-keys --from-literal=MCP_API_KEYS="key1,key2,key3" -n cheerio-mcp
+#
+# Then uncomment and reference the secret:
+# secrets:
+#   MCP_API_KEYS: "your-secret-key-here"
+#
+# Or better, use an existing Kubernetes secret:
+# In deployment template, add:
+#   envFrom:
+#     - secretRef:
+#         name: mcp-api-keys
+#
+# Generate secure key:
+#   kubectl run keygen --rm -it --restart=Never --image=node:20-alpine -- node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
 server:
   enabled: true
   playwright:

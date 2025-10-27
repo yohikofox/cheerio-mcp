@@ -13,6 +13,10 @@ services:
       - DISPLAY=:99
       - NODE_ENV=production
       - PLAYWRIGHT_HEADLESS=false
+      # API Authentication
+      # Generate secure key: docker run --rm node:20-alpine node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      # Multiple keys: MCP_API_KEYS=key1,key2,key3
+      - MCP_API_KEYS=${MCP_API_KEYS:-}
     volumes:
       - ./data:/app/domain-configs
     restart: unless-stopped

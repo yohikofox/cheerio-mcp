@@ -296,6 +296,248 @@ environment:
 
 ---
 
+## Authentification
+
+### Vue d'Ensemble
+
+Le serveur MCP Cheerio supporte l'authentification par **API Key** via le header `X-API-Key`.
+
+**Caractéristiques :**
+- ✅ Support de **plusieurs API keys** simultanément
+- ✅ Endpoints publics : `/health` et `/` (sans authentification)
+- ✅ Endpoints protégés : `/mcp` (nécessite API key)
+- ✅ Backward compatible : si aucune clé n'est configurée, tous les endpoints sont publics
+
+### Configuration du Serveur MCP
+
+#### 1. Générer des API Keys Sécurisées
+
+**Via CLI (recommandé) :**
+```bash
+# Générer une clé aléatoire sécurisée de 32 bytes (64 caractères hex)
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+# Résultat exemple:
+# a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2
+```
+
+**Via Docker :**
+```bash
+docker run --rm node:20-alpine node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+**Via Kubernetes :**
+```bash
+kubectl run keygen --rm -it --restart=Never --image=node:20-alpine \
+  -- node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+#### 2. Configurer les API Keys
+
+**Environnement Local (.env) :**
+```env
+# Single key
+MCP_API_KEYS=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2
+
+# Multiple keys (dev, staging, prod)
+MCP_API_KEYS=dev-key-123...,staging-key-456...,prod-key-789...
+```
+
+**Docker Compose :**
+```yaml
+services:
+  mcp-server:
+    environment:
+      - MCP_API_KEYS=your-secret-key-here
+      # Ou via fichier .env
+      - MCP_API_KEYS=${MCP_API_KEYS}
+```
+
+**Kubernetes (Secret) :**
+```bash
+# Créer un secret
+kubectl create secret generic mcp-api-keys \
+  --from-literal=MCP_API_KEYS="key1,key2,key3" \
+  -n cheerio-mcp
+
+# Référencer dans le deployment
+# Via values.yaml:
+secrets:
+  MCP_API_KEYS: "your-key-here"
+
+# Ou référencer le secret existant dans le deployment template
+```
+
+#### 3. Vérifier l'Authentification
+
+**Test sans API key (doit échouer) :**
+```bash
+curl http://localhost:3000/mcp
+# Attendu: 401 Unauthorized
+```
+
+**Test avec API key valide :**
+```bash
+curl -H "X-API-Key: your-secret-key-here" http://localhost:3000/mcp
+# Attendu: 200 OK ou réponse MCP
+```
+
+**Test endpoint public (sans API key) :**
+```bash
+curl http://localhost:3000/health
+# Attendu: 200 OK (pas d'authentification requise)
+```
+
+### Configuration n8n avec Authentification
+
+#### Option 1 : Via Custom Headers (Recommandé pour MCP Client Tool)
+
+Si vous utilisez le nœud MCP Client Tool natif, vous devrez peut-être configurer un **HTTP Request node** personnalisé :
+
+```
+1. Ajouter un nœud HTTP Request
+2. Method: POST
+3. URL: http://cheerio-mcp-server:3000/mcp
+4. Headers:
+   - Name: X-API-Key
+   - Value: your-secret-key-here
+   - Name: Content-Type
+   - Value: application/json
+5. Body (JSON):
+   {
+     "jsonrpc": "2.0",
+     "method": "tools/list",
+     "params": {},
+     "id": 1
+   }
+```
+
+#### Option 2 : Via Environment Variables (si supporté)
+
+Certaines versions du MCP Client Tool pourraient supporter des headers personnalisés. Consultez la documentation spécifique.
+
+#### Option 3 : Via Proxy (pour cas complexes)
+
+Si le nœud MCP Client ne supporte pas les headers personnalisés, vous pouvez :
+
+1. **Créer un proxy simple** qui ajoute le header automatiquement
+2. **Utiliser nginx** comme reverse proxy avec ajout du header
+3. **Modifier temporairement le serveur** pour accepter l'API key via query param (moins sécurisé)
+
+**Exemple nginx proxy :**
+```nginx
+location /mcp {
+    proxy_pass http://cheerio-mcp-server:3000;
+    proxy_set_header X-API-Key "your-secret-key";
+    proxy_set_header Host $host;
+}
+```
+
+### Rotation des API Keys
+
+Grâce au support multi-keys, vous pouvez faire une rotation sans downtime :
+
+**Étape 1 : Ajouter la nouvelle clé**
+```bash
+# Ancienne config
+MCP_API_KEYS=old-key
+
+# Nouvelle config avec les deux clés
+MCP_API_KEYS=old-key,new-key
+```
+
+**Étape 2 : Redéployer le serveur**
+```bash
+# Docker
+docker-compose up -d
+
+# Kubernetes
+kubectl rollout restart deployment cheerio-mcp-server -n cheerio-mcp
+```
+
+**Étape 3 : Mettre à jour n8n avec la nouvelle clé**
+```
+Mettre à jour le header X-API-Key dans n8n
+Tester que tout fonctionne
+```
+
+**Étape 4 : Retirer l'ancienne clé**
+```bash
+# Nouvelle config avec seulement la nouvelle clé
+MCP_API_KEYS=new-key
+```
+
+**Étape 5 : Redéployer à nouveau**
+
+### Sécurité
+
+#### ⚠️ Bonnes Pratiques
+
+1. **HTTPS Obligatoire en Production**
+   ```yaml
+   # Ingress avec TLS
+   ingress:
+     enabled: true
+     tls:
+       - secretName: mcp-api-tls
+         hosts:
+           - mcp-api.example.local
+   ```
+
+2. **Stockage Sécurisé des Clés**
+   - ❌ Ne JAMAIS commiter les clés dans Git
+   - ❌ Ne JAMAIS mettre les clés dans les values.yaml
+   - ✅ Utiliser les Secrets Kubernetes
+   - ✅ Utiliser les variables d'environnement
+   - ✅ Utiliser un gestionnaire de secrets (Vault, etc.)
+
+3. **Longueur Minimale**
+   - Utiliser au minimum 32 bytes (64 caractères hex)
+   - Préférer des clés générées aléatoirement
+
+4. **Rotation Régulière**
+   - Changer les clés tous les 90 jours minimum
+   - Après tout départ de personnel ayant accès
+   - En cas de suspicion de compromission
+
+5. **Monitoring**
+   - Logger les tentatives d'authentification échouées
+   - Alerter sur les échecs répétés depuis une même IP
+   - Surveiller l'utilisation de chaque clé
+
+#### 🔍 Logs d'Authentification
+
+Le serveur MCP log automatiquement :
+
+**Succès :**
+```
+[Auth] Authorized: POST /mcp from 10.0.0.1
+```
+
+**Échecs :**
+```
+[Auth] Unauthorized: Missing API key - POST /mcp from 10.0.0.1
+[Auth] Unauthorized: Invalid API key - POST /mcp from 10.0.0.1
+```
+
+**Avertissements :**
+```
+[Auth] Warning: No API keys configured (MCP_API_KEYS not set). All requests allowed.
+```
+
+#### 🚨 Que Faire en Cas de Compromission
+
+Si une clé est compromise :
+
+1. **Immédiatement** : Retirer la clé de `MCP_API_KEYS`
+2. Redéployer le serveur
+3. Générer de nouvelles clés
+4. Mettre à jour tous les clients (n8n, etc.)
+5. Analyser les logs pour identifier les accès non autorisés
+6. Documenter l'incident
+
+---
+
 ## Utilisation
 
 ### Créer un Workflow avec AI Agent
