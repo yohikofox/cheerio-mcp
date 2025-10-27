@@ -557,7 +557,54 @@ function extractDataWithDomainConfig(html: string, url: string, config: DomainCo
     });
   }
 
-  logWithTime(`[Config-Guided Extraction] Extracted ${data.length} items`);
+  // Strategy 3: Extract from revealedContent (accordion/tab data)
+  if (config.revealedContent && config.revealedContent.length > 0) {
+    logWithTime(`[Config-Guided Extraction] Extracting from ${config.revealedContent.length} revealed content sections...`);
+
+    config.revealedContent.forEach((revealedSection, index) => {
+      const { trigger, selector, structured, fieldsToExtract } = revealedSection;
+
+      if (!structured || Object.keys(structured).length === 0) {
+        logWithTime(`[Config-Guided Extraction] Skipping revealed section ${index + 1} (${trigger}) - no structured data`);
+        return;
+      }
+
+      logWithTime(`[Config-Guided Extraction] Processing revealed section: ${trigger}`);
+
+      // Determine which fields to extract
+      const fieldsToProcess = fieldsToExtract && fieldsToExtract.length > 0
+        ? fieldsToExtract  // Use specified fields only
+        : Object.keys(structured);  // Extract all fields if no filter
+
+      let extractedCount = 0;
+
+      // Extract only the specified fields from this revealed section
+      fieldsToProcess.forEach((fieldName) => {
+        const fieldValue = structured[fieldName];
+
+        if (fieldValue && String(fieldValue).trim().length > 0) {
+          addData({
+            label: fieldName,
+            value: String(fieldValue),
+            type: 'text',
+            attributes: {
+              source: 'revealed-content',
+              trigger: trigger,
+              selector: selector
+            }
+          });
+          extractedCount++;
+        } else if (fieldsToExtract && fieldsToExtract.includes(fieldName)) {
+          // Warn if a requested field is missing or empty
+          logWithTime(`[Config-Guided Extraction] Warning: Field "${fieldName}" not found or empty in "${trigger}"`);
+        }
+      });
+
+      logWithTime(`[Config-Guided Extraction] Extracted ${extractedCount} fields from "${trigger}"${fieldsToExtract ? ` (${fieldsToExtract.length} requested)` : ' (all fields)'}`);
+    });
+  }
+
+  logWithTime(`[Config-Guided Extraction] Extracted ${data.length} items total`);
   return data;
 }
 
@@ -750,60 +797,118 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
     await page.waitForTimeout(randomDelay(200, 400)); // RANDOMIZED to avoid bot detection
     logWithTime('Scrolling completed');
 
-    // Try to expand any collapsible sections by clicking on them (with limits to avoid timeout)
+    // Load domain config early to check for custom interaction selectors
+    let domainConfig: DomainConfig | null = null;
     try {
-      // Look for buttons or elements that might expand specification sections
-      const expandableSelectors = [
-        'button[aria-expanded="false"]',
-        '[class*="collaps"]',
-        '[class*="expand"]',
-        '[class*="accord"]',
-        '[class*="toggle"]',
-        '[data-testid*="expand"]',
-        // Orange specific selectors
-        '[class*="fiche"]',
-        '[class*="characteristic"]',
-        '[class*="detail"]'
-      ];
+      domainConfig = await loadDomainConfig(url);
+      if (domainConfig) {
+        logWithTime(`[Scraper] Found domain config for ${domainConfig.domain}`);
+      }
+    } catch (err) {
+      logWithTime(`[Scraper] Could not load domain config: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
+    // Try to expand sections using domain-specific selectors OR generic fallback
+    try {
       let clickedCount = 0;
-      const MAX_CLICKS = 10; // Limit to 10 clicks maximum to avoid timeout
-      const SECTION_TIMEOUT = 5000; // Max 5 seconds for this entire section
 
-      const clickPromise = (async () => {
-        for (const selector of expandableSelectors) {
-          if (clickedCount >= MAX_CLICKS) break;
+      // Strategy 1: Use domain-specific interactionSelectors if available
+      if (domainConfig?.interactionSelectors && domainConfig.interactionSelectors.length > 0) {
+        logWithTime(`[Scraper] Using ${domainConfig.interactionSelectors.length} domain-specific interaction selectors`);
 
-          const elements = await page.$$(selector);
-          for (const element of elements) {
-            if (clickedCount >= MAX_CLICKS) break;
+        const MAX_CLICKS_PER_SELECTOR = 20;
+        const SECTION_TIMEOUT = 10000; // 10 seconds for domain-specific interactions
+        const interactionSelectors = domainConfig.interactionSelectors; // Store locally for closure
 
+        const clickPromise = (async () => {
+          for (const selector of interactionSelectors) {
             try {
-              // Check if element is visible and clickable
-              if (await element.isVisible()) {
-                await element.click({ timeout: 500 }); // Reduced from 1000ms
-                clickedCount++;
-                await page.waitForTimeout(randomDelay(100, 200)); // Reduced delay
+              const elements = await page.$$(selector);
+              logWithTime(`[Scraper] Found ${elements.length} elements for selector: ${selector}`);
+
+              for (let i = 0; i < Math.min(elements.length, MAX_CLICKS_PER_SELECTOR); i++) {
+                try {
+                  const element = elements[i];
+                  const isVisible = await element.isVisible();
+                  const ariaExpanded = await element.getAttribute('aria-expanded');
+
+                  // Only click if not already expanded
+                  if (isVisible && ariaExpanded !== 'true') {
+                    await element.scrollIntoViewIfNeeded();
+                    await page.waitForTimeout(200);
+                    await element.click({ timeout: 1000 });
+                    clickedCount++;
+                    logWithTime(`[Scraper] Clicked element ${i + 1}/${elements.length} for ${selector}`);
+                    await page.waitForTimeout(randomDelay(300, 500)); // Wait for accordion animation
+                  }
+                } catch (clickErr) {
+                  logWithTime(`[Scraper] Could not click element ${i + 1} for ${selector}`);
+                }
               }
             } catch (err) {
-              // Continue if clicking fails
+              logWithTime(`[Scraper] Error processing selector ${selector}:`, err instanceof Error ? err.message : String(err));
             }
           }
-        }
-      })();
+        })();
 
-      // Wait for clicks with global timeout
-      await Promise.race([
-        clickPromise,
-        new Promise(resolve => setTimeout(resolve, SECTION_TIMEOUT))
-      ]);
+        await Promise.race([
+          clickPromise,
+          new Promise(resolve => setTimeout(resolve, SECTION_TIMEOUT))
+        ]);
 
-      logWithTime(`Clicked ${clickedCount} expandable elements`);
+        logWithTime(`[Scraper] Clicked ${clickedCount} domain-specific interaction elements`);
+        await page.waitForTimeout(randomDelay(500, 1000)); // Extra wait for content to load
+      }
+      // Strategy 2: Fallback to generic expandable selectors if no domain config
+      else {
+        logWithTime('[Scraper] No domain-specific selectors, using generic expandable detection');
 
-      // Wait for any newly loaded content (RANDOMIZED 200-400ms, reduced from 400-700ms)
-      await page.waitForTimeout(randomDelay(200, 400));
+        const expandableSelectors = [
+          'button[aria-expanded="false"]',
+          '[class*="collaps"]',
+          '[class*="expand"]',
+          '[class*="accord"]',
+          '[class*="toggle"]',
+          '[data-testid*="expand"]',
+          '[class*="fiche"]',
+          '[class*="characteristic"]',
+          '[class*="detail"]'
+        ];
+
+        const MAX_CLICKS = 10;
+        const SECTION_TIMEOUT = 5000;
+
+        const clickPromise = (async () => {
+          for (const selector of expandableSelectors) {
+            if (clickedCount >= MAX_CLICKS) break;
+
+            const elements = await page.$$(selector);
+            for (const element of elements) {
+              if (clickedCount >= MAX_CLICKS) break;
+
+              try {
+                if (await element.isVisible()) {
+                  await element.click({ timeout: 500 });
+                  clickedCount++;
+                  await page.waitForTimeout(randomDelay(100, 200));
+                }
+              } catch (err) {
+                // Continue if clicking fails
+              }
+            }
+          }
+        })();
+
+        await Promise.race([
+          clickPromise,
+          new Promise(resolve => setTimeout(resolve, SECTION_TIMEOUT))
+        ]);
+
+        logWithTime(`[Scraper] Clicked ${clickedCount} generic expandable elements`);
+        await page.waitForTimeout(randomDelay(200, 400));
+      }
     } catch (err) {
-      logWithTime('Could not expand sections:', err instanceof Error ? err.message : String(err));
+      logWithTime('[Scraper] Could not expand sections:', err instanceof Error ? err.message : String(err));
     }
 
     // Take a screenshot for debugging (optional)
@@ -873,20 +978,13 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
     // Extract title
     const title = $('title').text().trim() || $('h1').first().text().trim() || 'No title';
 
-    // Try to load domain config to guide extraction
+    // Use domain config for extraction (already loaded earlier)
     let data: RawDataItem[];
-    try {
-      const domainConfig = await loadDomainConfig(url);
-
-      if (domainConfig) {
-        logWithTime(`[Scraper] Found domain config for ${domainConfig.domain}, using config-guided extraction`);
-        data = extractDataWithDomainConfig(html, url, domainConfig);
-      } else {
-        logWithTime(`[Scraper] No domain config found, using generic extraction`);
-        data = extractRawDataFromHtml(html, url);
-      }
-    } catch (err) {
-      logWithTime(`[Scraper] Error loading domain config: ${err instanceof Error ? err.message : String(err)}, falling back to generic extraction`);
+    if (domainConfig) {
+      logWithTime(`[Scraper] Using config-guided extraction for ${domainConfig.domain}`);
+      data = extractDataWithDomainConfig(html, url, domainConfig);
+    } else {
+      logWithTime(`[Scraper] No domain config, using generic extraction`);
       data = extractRawDataFromHtml(html, url);
     }
 

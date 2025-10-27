@@ -28,12 +28,13 @@ export interface ProductInfoSelectors {
   rating?: SelectorMatch[];
 }
 
-export interface AccordionContent {
+export interface RevealedContent {
   trigger: string;
   selector: string;
   content: string;
   html: string;
   structured?: Record<string, any>;
+  fieldsToExtract?: string[];  // Liste des champs à extraire depuis structured
   length: number;
 }
 
@@ -47,7 +48,7 @@ export interface DomainConfig {
   extractionStrategy: 'structured' | 'selectors' | 'hybrid';
   recommendations: string[];
   interactionSelectors?: string[];
-  accordionContent?: AccordionContent[];
+  revealedContent?: RevealedContent[];
 }
 
 const CONFIG_DIR = path.join(process.cwd(), 'domain-configs');
@@ -212,7 +213,7 @@ export async function updateDomainConfig(
       extractionStrategy: updates.extractionStrategy || 'selectors',
       recommendations: updates.recommendations || [],
       interactionSelectors: updates.interactionSelectors,
-      accordionContent: updates.accordionContent,
+      revealedContent: updates.revealedContent,
     };
   } else {
     // Merge mode: deep merge of updates into existing config
@@ -234,9 +235,9 @@ export async function updateDomainConfig(
       interactionSelectors: updates.interactionSelectors !== undefined
         ? updates.interactionSelectors
         : existingConfig.interactionSelectors,
-      accordionContent: updates.accordionContent !== undefined
-        ? updates.accordionContent
-        : existingConfig.accordionContent,
+      revealedContent: updates.revealedContent !== undefined
+        ? updates.revealedContent
+        : existingConfig.revealedContent,
     };
   }
 

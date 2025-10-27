@@ -13,16 +13,17 @@ export interface PageStructureAnalysis {
     commonPatterns: PatternInfo[];
     recommendations: string[];
     interactionSelectors?: string[];
-    accordionContent?: AccordionContent[];
+    revealedContent?: RevealedContent[];
   };
 }
 
-interface AccordionContent {
+interface RevealedContent {
   trigger: string;
   selector: string;
   content: string;
   html: string;
   structured?: Record<string, any>;
+  fieldsToExtract?: string[];  // Liste des champs à extraire depuis structured
   length: number;
 }
 
@@ -186,7 +187,7 @@ export async function analyzePageStructure(
     console.log('[Page Analyzer] Scrolling completed');
 
     // Click on custom interaction selectors provided by user AFTER scrolling
-    const accordionContents: AccordionContent[] = [];
+    const revealedContents: RevealedContent[] = [];
 
     if (interactionSelectors && interactionSelectors.length > 0) {
       console.log(`[Page Analyzer] Processing ${interactionSelectors.length} custom interaction selectors...`);
@@ -238,9 +239,9 @@ export async function analyzePageStructure(
                       if (textContent && textContent.trim().length > 0) {
                         // Parse HTML structure for structured data
                         const $panel = cheerio.load(innerHTML);
-                        const structured = parseAccordionStructure($panel);
+                        const structured = parseRevealedContentStructure($panel);
 
-                        accordionContents.push({
+                        revealedContents.push({
                           trigger: triggerText?.trim() || 'Unknown',
                           selector: `#${ariaControls}`,
                           content: textContent.trim(),
@@ -273,7 +274,7 @@ export async function analyzePageStructure(
       const htmlAfter = await page.content();
       console.log(`[Page Analyzer] HTML size AFTER interactions: ${htmlAfter.length} characters`);
       console.log(`[Page Analyzer] HTML size difference: ${htmlAfter.length - htmlBefore.length} characters`);
-      console.log(`[Page Analyzer] Extracted content from ${accordionContents.length} accordions`);
+      console.log(`[Page Analyzer] Extracted content from ${revealedContents.length} revealed sections`);
       console.log('[Page Analyzer] Custom interactions completed');
     }
 
@@ -306,7 +307,7 @@ export async function analyzePageStructure(
       productInfo,
       recommendations,
       interactionSelectors,
-      accordionContents
+      revealedContents
     );
     await saveDomainConfig(domainConfig);
 
@@ -319,7 +320,7 @@ export async function analyzePageStructure(
         commonPatterns,
         recommendations,
         interactionSelectors,
-        accordionContent: accordionContents.length > 0 ? accordionContents : undefined,
+        revealedContent: revealedContents.length > 0 ? revealedContents : undefined,
       },
     };
   } catch (error) {
@@ -339,7 +340,7 @@ function convertToDomainConfig(
   productInfo: ProductInfoSelectors,
   recommendations: string[],
   interactionSelectors?: string[],
-  accordionContents?: AccordionContent[]
+  revealedContents?: RevealedContent[]
 ): DomainConfig {
   const urlObj = new URL(url);
   const domain = urlObj.hostname.replace(/^www\./, '');
@@ -367,16 +368,16 @@ function convertToDomainConfig(
     extractionStrategy,
     recommendations: recommendations,
     interactionSelectors: interactionSelectors, // Custom selectors for revealing hidden content
-    accordionContent: accordionContents && accordionContents.length > 0 ? accordionContents : undefined,
+    revealedContent: revealedContents && revealedContents.length > 0 ? revealedContents : undefined,
   };
 
   return config;
 }
 
 /**
- * Parse accordion HTML content to extract structured data
+ * Parse revealed content HTML to extract structured data
  */
-function parseAccordionStructure($: cheerio.CheerioAPI): Record<string, any> {
+function parseRevealedContentStructure($: cheerio.CheerioAPI): Record<string, any> {
   const result: Record<string, any> = {};
 
   // Parse tables with key-value pairs

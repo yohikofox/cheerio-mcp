@@ -626,11 +626,11 @@ app.post("/mcp", async (req: Request, res: Response) => {
                       interactionSelectors: {
                         type: "array",
                         items: { type: "string" },
-                        description: "CSS selectors for interactions (accordions, etc.)",
+                        description: "CSS selectors for interactions (accordions, tabs, etc.)",
                       },
-                      accordionContent: {
+                      revealedContent: {
                         type: "array",
-                        description: "Accordion content configuration",
+                        description: "Content revealed by interactions configuration",
                       },
                     },
                   },

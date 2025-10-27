@@ -85,7 +85,7 @@ Analyse une page pour identifier les meilleurs sélecteurs de données.
       "price": [...],
       "images": [...]
     },
-    "accordionContent": [{
+    "revealedContent": [{
       "trigger": "Descriptif technique",
       "selector": "#ProductSheetAccordion-content-1",
       "content": "...",
@@ -125,8 +125,8 @@ Stocke les configurations apprises pour chaque domaine.
   structuredData: any[];
   extractionStrategy: 'structured' | 'selectors' | 'hybrid';
   recommendations: string[];
-  interactionSelectors?: string[];    // Sélecteurs custom pour accordéons
-  accordionContent?: AccordionContent[];  // Contenu extrait
+  interactionSelectors?: string[];    // Sélecteurs custom pour interactions (accordéons, onglets, etc.)
+  revealedContent?: RevealedContent[];  // Contenu révélé par interactions
 }
 ```
 
