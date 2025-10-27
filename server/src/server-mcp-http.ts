@@ -1076,12 +1076,8 @@ app.post("/mcp", async (req: Request, res: Response) => {
                 try {
                   const parsedConfig = JSON.parse(configJson);
 
-                  // Validate required fields
-                  if (!parsedConfig.productInfo || !parsedConfig.structuredData || !parsedConfig.extractionStrategy) {
-                    throw new Error("Invalid config JSON: missing required fields (productInfo, structuredData, extractionStrategy)");
-                  }
-
                   // Use replace mode with parsed config
+                  // Note: updateDomainConfig will apply default values for missing fields
                   updatedConfig = await updateDomainConfig(
                     domain,
                     parsedConfig,
