@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import YAML from 'yaml';
 import { chromium, Page } from 'playwright-core';
 import BrowserManager from './browser-manager.js';
+import { loadDomainConfig, DomainConfig } from './domain-config-manager.js';
 
 /**
  * Log with timestamp for temporal tracking
@@ -417,6 +418,150 @@ function extractRawDataFromHtml(html: string, url: string): RawDataItem[] {
 }
 
 /**
+ * Extract data using domain configuration as guide
+ */
+function extractDataWithDomainConfig(html: string, url: string, config: DomainConfig): RawDataItem[] {
+  const $ = cheerio.load(html);
+  const data: RawDataItem[] = [];
+  const seen = new Set<string>();
+
+  const addData = (item: RawDataItem) => {
+    const key = `${item.label || ''}:${item.value}`;
+    if (!seen.has(key) && item.value && item.value.length > 0) {
+      seen.add(key);
+      data.push(item);
+    }
+  };
+
+  logWithTime(`[Config-Guided Extraction] Strategy: ${config.extractionStrategy}`);
+
+  // Strategy 1: Extract structured data (JSON-LD, microdata, etc.)
+  if (config.extractionStrategy === 'structured' || config.extractionStrategy === 'hybrid') {
+    logWithTime(`[Config-Guided Extraction] Extracting structured data...`);
+
+    config.structuredData.forEach((structuredInfo) => {
+      const { selector, format, type, data: configData } = structuredInfo;
+
+      if (format === 'json-ld') {
+        // Extract JSON-LD data
+        $(selector).each((_, script) => {
+          try {
+            const jsonText = $(script).html();
+            if (jsonText) {
+              const jsonData = JSON.parse(jsonText);
+
+              // If this is the expected type from config, extract specified fields
+              if (jsonData['@type'] === type || (Array.isArray(jsonData) && jsonData.some((item: any) => item['@type'] === type))) {
+                const targetData = Array.isArray(jsonData)
+                  ? jsonData.find((item: any) => item['@type'] === type)
+                  : jsonData;
+
+                if (targetData && configData) {
+                  // Get list of fields to extract from config
+                  const fieldsToExtract = Object.keys(configData).filter(key => !key.startsWith('@'));
+
+                  logWithTime(`[Config-Guided Extraction] Extracting ${fieldsToExtract.length} fields: ${fieldsToExtract.join(', ')}`);
+
+                  // Extract ONLY the fields specified in config
+                  fieldsToExtract.forEach((key) => {
+                    if (!targetData.hasOwnProperty(key)) {
+                      logWithTime(`[Config-Guided Extraction] Warning: Field '${key}' not found in JSON-LD`);
+                      return;
+                    }
+
+                    const value = targetData[key];
+                    let stringValue: string;
+
+                    if (typeof value === 'object' && value !== null) {
+                      // Handle nested objects (e.g., brand.name)
+                      stringValue = JSON.stringify(value, null, 2);
+                    } else {
+                      stringValue = String(value);
+                    }
+
+                    addData({
+                      label: `${type}.${key}`,
+                      value: stringValue,
+                      type: 'text',
+                      attributes: { source: 'structured-data', format: 'json-ld' }
+                    });
+                  });
+                } else if (targetData && !configData) {
+                  // Fallback: if no config.data specified, extract all fields
+                  logWithTime(`[Config-Guided Extraction] No field filter in config, extracting all fields`);
+
+                  Object.entries(targetData).forEach(([key, value]) => {
+                    if (key.startsWith('@')) return; // Skip @context, @type, etc.
+
+                    let stringValue: string;
+                    if (typeof value === 'object' && value !== null) {
+                      stringValue = JSON.stringify(value, null, 2);
+                    } else {
+                      stringValue = String(value);
+                    }
+
+                    addData({
+                      label: `${type}.${key}`,
+                      value: stringValue,
+                      type: 'text',
+                      attributes: { source: 'structured-data', format: 'json-ld' }
+                    });
+                  });
+                }
+              }
+            }
+          } catch (err) {
+            logWithTime(`[Config-Guided Extraction] Failed to parse JSON-LD: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        });
+      }
+    });
+  }
+
+  // Strategy 2: Extract using CSS selectors from productInfo
+  if (config.extractionStrategy === 'selectors' ||
+      (config.extractionStrategy === 'hybrid' && data.length === 0)) {
+    logWithTime(`[Config-Guided Extraction] Extracting using CSS selectors...`);
+
+    // Extract each field defined in productInfo
+    Object.entries(config.productInfo).forEach(([fieldName, selectorMatches]) => {
+      if (!selectorMatches || selectorMatches.length === 0) return;
+
+      // Use the first (highest confidence) selector
+      const selectorMatch = selectorMatches[0];
+      const { selector } = selectorMatch;
+
+      $(selector).each((i, el) => {
+        // Limit to first 3 matches per selector to avoid duplicates
+        if (i >= 3) return;
+
+        const $el = $(el);
+        let value: string;
+
+        // Special handling based on field type
+        if (fieldName === 'images') {
+          value = $el.attr('src') || $el.attr('data-src') || '';
+        } else {
+          value = $el.text().trim();
+        }
+
+        if (value) {
+          addData({
+            label: fieldName,
+            value: value,
+            type: fieldName === 'images' ? 'image' : fieldName === 'price' ? 'price' : 'text',
+            attributes: { source: 'css-selector', selector: selector }
+          });
+        }
+      });
+    });
+  }
+
+  logWithTime(`[Config-Guided Extraction] Extracted ${data.length} items`);
+  return data;
+}
+
+/**
  * Scrape page using Playwright to get fully rendered HTML, then parse with Cheerio
  */
 export async function scrapePageWithPlaywright(url: string, options: { flatten?: boolean; format?: 'json' | 'yaml' } = {}): Promise<RawPageContent> {
@@ -728,8 +873,22 @@ export async function scrapePageWithPlaywright(url: string, options: { flatten?:
     // Extract title
     const title = $('title').text().trim() || $('h1').first().text().trim() || 'No title';
 
-    // Extract raw data from the rendered HTML
-    const data = extractRawDataFromHtml(html, url);
+    // Try to load domain config to guide extraction
+    let data: RawDataItem[];
+    try {
+      const domainConfig = await loadDomainConfig(url);
+
+      if (domainConfig) {
+        logWithTime(`[Scraper] Found domain config for ${domainConfig.domain}, using config-guided extraction`);
+        data = extractDataWithDomainConfig(html, url, domainConfig);
+      } else {
+        logWithTime(`[Scraper] No domain config found, using generic extraction`);
+        data = extractRawDataFromHtml(html, url);
+      }
+    } catch (err) {
+      logWithTime(`[Scraper] Error loading domain config: ${err instanceof Error ? err.message : String(err)}, falling back to generic extraction`);
+      data = extractRawDataFromHtml(html, url);
+    }
 
     // Calculate statistics
     const scrapingTimeMs = Date.now() - startTime;

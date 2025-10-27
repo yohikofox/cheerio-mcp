@@ -139,7 +139,73 @@ Stocke les configurations apprises pour chaque domaine.
 
 ## Développements récents (Oct 2025)
 
-### 1. Édition de schémas d'extraction (26 Oct 2025)
+### 1. Extraction guidée par domain config (27 Oct 2025)
+
+**Problème**: Le scraper extrayait toujours des données brutes génériques, sans utiliser les configurations de domaine apprises via `analyze_page_structure`.
+
+**Solution**: Le scraper charge maintenant automatiquement la domain config et l'utilise pour guider l'extraction.
+
+**Fonctionnement**:
+
+1. **Lors du scraping** (`scrape_page`, `search_and_scrape`), le scraper :
+   - Tente de charger la config du domaine avec `loadDomainConfig(url)`
+   - Si config trouvée → utilise `extractDataWithDomainConfig()`
+   - Sinon → utilise `extractRawDataFromHtml()` (comportement générique)
+
+2. **Extraction guidée par config** selon `extractionStrategy` :
+   - **`structured`** : Parse le JSON-LD et extrait TOUS les champs du type spécifié dans `structuredData`
+     ```typescript
+     // Extrait automatiquement tous les champs du JSON-LD Product
+     Product.brand → { label: "Product.brand", value: "APPLE" }
+     Product.name → { label: "Product.name", value: "iPhone 17 Pro Max..." }
+     Product.color → { label: "Product.color", value: "Orange" }
+     Product.sku → { label: "Product.sku", value: "ip17prom1torange" }
+     ```
+
+   - **`selectors`** : Utilise les CSS selectors définis dans `productInfo`
+     ```typescript
+     // Utilise les sélecteurs définis dans config.productInfo
+     productInfo.title[0].selector → h1.product-title
+     productInfo.price[0].selector → span.price-final
+     ```
+
+   - **`hybrid`** : Essaie `structured` d'abord, puis `selectors` si aucune donnée extraite
+
+3. **Format de sortie** : Chaque item extrait contient :
+   ```typescript
+   {
+     label: "Product.brand",           // Nom du champ
+     value: "APPLE",                   // Valeur extraite
+     type: "text",                     // Type de donnée
+     attributes: {
+       source: "structured-data",      // Méthode d'extraction
+       format: "json-ld"               // Format source
+     }
+   }
+   ```
+
+**Avantages**:
+- ✅ Extraction ciblée uniquement sur les données configurées
+- ✅ Moins de bruit dans les résultats
+- ✅ Données structurées exploitables directement
+- ✅ Workflow "analyze → edit config → scrape" fonctionnel
+- ✅ Fallback automatique si pas de config
+
+**Logs ajoutés**:
+```
+[Scraper] Found domain config for cdiscount.com, using config-guided extraction
+[Config-Guided Extraction] Strategy: structured
+[Config-Guided Extraction] Extracting structured data...
+[Config-Guided Extraction] Extracted 8 items
+```
+
+**Cas d'usage**:
+1. Analyser une page produit avec `analyze_page_structure`
+2. Éditer la config avec `update_domain_config` pour ne garder que les champs souhaités
+3. Scraper des pages du même domaine → extraction guidée automatique
+4. Mapper les données extraites avec un agent Claude pour la structure finale
+
+### 2. Édition de schémas d'extraction (26 Oct 2025)
 
 **Problème**: Après avoir analysé une page avec `analyze_page_structure`, le schéma généré automatiquement peut nécessiter des ajustements pour mieux cadrer l'extraction.
 
