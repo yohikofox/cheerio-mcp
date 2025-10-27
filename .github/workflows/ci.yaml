@@ -128,10 +128,6 @@ jobs:
           release-branch: main
           dev-branch: develop
 
-      - name: Create Helm values file
-        run: |
-          echo '${{ vars.HELM_VALUES }}' > helm-values.yaml
-
       - name: Deploy Server to cluster
         uses: wahyd4/kubectl-helm-action@master
         env:
