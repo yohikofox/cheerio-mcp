@@ -371,11 +371,28 @@ server:
 
 client:
   enabled: false
-  # Add client-specific settings here if needed
+  # Server connection configuration
+  # When deploying the client, specify the server service name
+  # The MCP_SERVER_URL will be auto-generated using Kubernetes DNS
+  server:
+    # Name of the server service (can be the fullname or a custom name)
+    # If empty and client is enabled, will try to use: <release-name>-server
+    serviceName: ""
+    # Namespace where the server is deployed (empty = same namespace)
+    namespace: ""
+    # Server port (default: 3000)
+    port: 3000
+    # Protocol (http or https)
+    protocol: "http"
 
 # Enable when appType: client
 # client:
 #   enabled: true
+#   server:
+#     serviceName: "cheerio-mcp-server"  # Name of your server release
+#     namespace: ""  # Same namespace
+#     port: 3000
+#     protocol: "http"
 
 # ============================================================================
 # Example Configurations for Different Scenarios

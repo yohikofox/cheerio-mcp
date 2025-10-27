@@ -65,6 +65,12 @@ spec:
         - name: DISPLAY
           value: ":99"
         {{- end }}
+        {{- if eq .Values.appType "client" }}
+        {{- if .Values.client.enabled }}
+        - name: MCP_SERVER_URL
+          value: {{ .Values.client.server.protocol }}://{{ .Values.client.server.serviceName }}{{- if .Values.client.server.namespace }}.{{ .Values.client.server.namespace }}.svc.cluster.local{{- end }}:{{ .Values.client.server.port }}
+        {{- end }}
+        {{- end }}
         {{- if .Values.config }}
         envFrom:
         - configMapRef:
