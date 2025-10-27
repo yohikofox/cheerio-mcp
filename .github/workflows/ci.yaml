@@ -142,9 +142,13 @@ jobs:
               --namespace="${{ vars.NAMESPACE }}" \
               --create-namespace \
               --timeout=120s \
+              --set appType="server" \
               --set image.repository="${{ secrets.REGISTRY_SERVER }}/cheerio-mcp-server" \
               --set image.tag="${{ github.sha }}" \
-              --set image.pullPolicy="IfNotPresent"
+              --set image.pullPolicy="IfNotPresent" \
+              --set service.targetPort="3000" \
+              --set vnc.enabled="true" \
+              --set ingress.enabled="true"
 
       - name: Deploy Client to cluster
         uses: wahyd4/kubectl-helm-action@master
@@ -156,8 +160,10 @@ jobs:
               --namespace="${{ vars.NAMESPACE }}" \
               --create-namespace \
               --timeout=120s \
+              --set appType="client" \
               --set image.repository="${{ secrets.REGISTRY_SERVER }}/cheerio-mcp-client" \
               --set image.tag="${{ github.sha }}" \
               --set image.pullPolicy="IfNotPresent" \
               --set service.targetPort="80" \
-              --set ingress.enabled="false"
+              --set vnc.enabled="false" \
+              --set ingress.enabled="true"

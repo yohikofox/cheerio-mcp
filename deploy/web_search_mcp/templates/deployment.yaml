@@ -4,6 +4,7 @@ metadata:
   name: {{ include "web-search-mcp.fullname" . }}
   labels:
     {{- include "web-search-mcp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ .Values.appType }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -21,6 +22,7 @@ spec:
         {{- end }}
       labels:
         {{- include "web-search-mcp.labels" . | nindent 8 }}
+        app.kubernetes.io/component: {{ .Values.appType }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -42,10 +44,26 @@ spec:
         - name: http
           containerPort: {{ .Values.service.targetPort }}
           protocol: TCP
+        {{- if and (eq .Values.appType "server") .Values.vnc.enabled }}
+        - name: vnc
+          containerPort: {{ .Values.vnc.vncPort }}
+          protocol: TCP
+        - name: novnc
+          containerPort: {{ .Values.vnc.novncPort }}
+          protocol: TCP
+        {{- end }}
         env:
         {{- range $key, $value := .Values.env }}
         - name: {{ $key }}
           value: {{ $value | quote }}
+        {{- end }}
+        {{- if eq .Values.appType "server" }}
+        {{- if .Values.server.playwright }}
+        - name: PLAYWRIGHT_HEADLESS
+          value: {{ .Values.server.playwright.headless | quote }}
+        {{- end }}
+        - name: DISPLAY
+          value: ":99"
         {{- end }}
         {{- if .Values.config }}
         envFrom:
@@ -56,10 +74,14 @@ spec:
         - secretRef:
             name: {{ include "web-search-mcp.fullname" . }}
         {{- end }}
+        {{- if .Values.livenessProbe }}
         livenessProbe:
           {{- toYaml .Values.livenessProbe | nindent 12 }}
+        {{- end }}
+        {{- if .Values.readinessProbe }}
         readinessProbe:
           {{- toYaml .Values.readinessProbe | nindent 12 }}
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
         {{- with .Values.volumeMounts }}

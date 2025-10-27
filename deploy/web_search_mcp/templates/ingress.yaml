@@ -5,6 +5,7 @@ metadata:
   name: {{ include "web-search-mcp.fullname" . }}
   labels:
     {{- include "web-search-mcp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ .Values.appType }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

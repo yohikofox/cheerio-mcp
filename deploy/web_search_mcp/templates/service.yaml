@@ -4,6 +4,7 @@ metadata:
   name: {{ include "web-search-mcp.fullname" . }}
   labels:
     {{- include "web-search-mcp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ .Values.appType }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -15,5 +16,15 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    {{- if and (eq .Values.appType "server") .Values.vnc.enabled }}
+    - port: {{ .Values.vnc.vncPort }}
+      targetPort: vnc
+      protocol: TCP
+      name: vnc
+    - port: {{ .Values.vnc.novncPort }}
+      targetPort: novnc
+      protocol: TCP
+      name: novnc
+    {{- end }}
   selector:
     {{- include "web-search-mcp.selectorLabels" . | nindent 4 }}

@@ -1,11 +1,14 @@
-# Default values for web-search-mcp
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+# Default values for cheerio-mcp
+# This chart can deploy either the server or client based on the values provided
 
-replicaCount: 2
+replicaCount: 1
+
+# Application type: server or client
+# This determines default configurations
+appType: server
 
 image:
-  repository: registry.example.local/cheerio-mcp
+  repository: registry.example.local/cheerio-mcp-server
   pullPolicy: IfNotPresent
   tag: "latest"
 
@@ -29,19 +32,23 @@ podSecurityContext:
 
 securityContext:
   allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
+  readOnlyRootFilesystem: false
   capabilities:
     drop:
     - ALL
 
+# Service configuration
 service:
   type: ClusterIP
   port: 80
+  # Target port - defaults based on appType
+  # server: 3000, client: 80
   targetPort: 3000
   annotations: {}
 
+# Ingress configuration
 ingress:
-  enabled: true
+  enabled: false
   className: "nginx"
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
@@ -55,10 +62,11 @@ ingress:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: web-search-mcp-tls
+    - secretName: cheerio-mcp-tls
       hosts:
         - mcp.example.local
 
+# Resource limits
 resources:
   limits:
     cpu: 500m
@@ -67,6 +75,7 @@ resources:
     cpu: 100m
     memory: 256Mi
 
+# Health checks
 livenessProbe:
   httpGet:
     path: /health
@@ -85,9 +94,10 @@ readinessProbe:
   timeoutSeconds: 3
   failureThreshold: 3
 
+# Autoscaling
 autoscaling:
-  enabled: true
-  minReplicas: 2
+  enabled: false
+  minReplicas: 1
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
@@ -109,10 +119,10 @@ autoscaling:
         periodSeconds: 30
       selectPolicy: Max
 
-# Additional volumes on the output Deployment definition.
+# Additional volumes
 volumes: []
 
-# Additional volumeMounts on the output Deployment definition.
+# Additional volumeMounts
 volumeMounts: []
 
 nodeSelector: {}
@@ -132,3 +142,22 @@ config: {}
 
 # Secret data (will be converted to env vars)
 secrets: {}
+
+# VNC ports for server (only applicable when appType: server)
+# These will only be exposed if appType is server
+vnc:
+  enabled: true
+  vncPort: 5900
+  novncPort: 6080
+
+# Server-specific configuration
+server:
+  enabled: false
+  # Additional server-specific settings
+  playwright:
+    headless: "false"
+
+# Client-specific configuration
+client:
+  enabled: false
+  # Additional client-specific settings

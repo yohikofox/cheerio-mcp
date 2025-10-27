@@ -1,0 +1,62 @@
+# Values file for deploying the MCP Server
+# Usage: helm install cheerio-mcp-server ./deploy/web_search_mcp -f ./deploy/values-server.yaml
+
+appType: server
+
+replicaCount: 1
+
+image:
+  repository: registry.example.local/cheerio-mcp-server
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+# Enable VNC ports for server
+vnc:
+  enabled: true
+  vncPort: 5900
+  novncPort: 6080
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+  hosts:
+    - host: mcp-api.example.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: cheerio-mcp-server-tls
+      hosts:
+        - mcp-api.example.local
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 200m
+    memory: 512Mi
+
+env:
+  PORT: "3000"
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+
+server:
+  enabled: true
+  playwright:
+    headless: "false"
+
+autoscaling:
+  enabled: false
