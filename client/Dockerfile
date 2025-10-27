@@ -31,8 +31,8 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create directories and set permissions for non-root user
-RUN mkdir -p /var/cache/nginx /var/run /var/log/nginx && \
-    chmod -R 777 /var/cache/nginx /var/run /var/log/nginx /usr/share/nginx/html
+RUN mkdir -p /var/cache/nginx /var/run /var/log/nginx /var/lib/nginx/logs /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy /var/lib/nginx/tmp/fastcgi /var/lib/nginx/tmp/uwsgi /var/lib/nginx/tmp/scgi && \
+    chmod -R 777 /var/cache/nginx /var/run /var/log/nginx /var/lib/nginx /usr/share/nginx/html
 
 # Expose port 80
 EXPOSE 80

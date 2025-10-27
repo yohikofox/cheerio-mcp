@@ -65,11 +65,9 @@ spec:
         - name: DISPLAY
           value: ":99"
         {{- end }}
-        {{- if eq .Values.appType "client" }}
-        {{- if .Values.client.enabled }}
+        {{- if and (eq .Values.appType "client") .Values.client.server.serviceName }}
         - name: MCP_SERVER_URL
           value: {{ include "web-search-mcp.mcpServerUrl" . | quote }}
-        {{- end }}
         {{- end }}
         {{- if or .Values.config .Values.secrets (and (eq .Values.appType "server") (or .Values.server.externalConfigMap .Values.server.externalSecret)) }}
         envFrom:

@@ -354,7 +354,6 @@ vnc:
 # ============================================================================
 
 server:
-  enabled: false
   # Playwright configuration
   playwright:
     headless: "false"
@@ -364,9 +363,8 @@ server:
   externalConfigMap: "mcp-server-config"
   externalSecret: "mcp-server-secrets"
 
-# Enable when appType: server
+# Example when appType: server
 # server:
-#   enabled: true
 #   playwright:
 #     headless: "false"
 #   # To disable external resources, set to empty string:
@@ -378,13 +376,11 @@ server:
 # ============================================================================
 
 client:
-  enabled: false
   # Server connection configuration
-  # When deploying the client, specify the server service name
+  # When deploying with appType: client, specify the server service name
   # The MCP_SERVER_URL will be auto-generated using Kubernetes DNS
   server:
-    # Name of the server service (can be the fullname or a custom name)
-    # If empty and client is enabled, will try to use: <release-name>-server
+    # Name of the server service (required when appType: client)
     serviceName: ""
     # Namespace where the server is deployed (empty = same namespace)
     namespace: ""
@@ -393,9 +389,8 @@ client:
     # Protocol (http or https)
     protocol: "http"
 
-# Enable when appType: client
+# Example when appType: client
 # client:
-#   enabled: true
 #   server:
 #     serviceName: "cheerio-mcp-server"  # Name of your server release
 #     namespace: ""  # Same namespace

@@ -77,7 +77,6 @@ helm install cheerio-mcp-server ./deploy/web_search_mcp \
   --set appType=server \
   --set image.repository=registry.example.local/cheerio-mcp-server \
   --set image.tag=latest \
-  --set server.enabled=true \
   --set ingress.enabled=true \
   --set ingress.hosts[0].host=mcp-api.example.local \
   --set ingress.hosts[0].paths[0].path=/ \
@@ -100,7 +99,6 @@ service:
   targetPort: 3000
 
 server:
-  enabled: true
   playwright:
     headless: "false"
   # Références aux ressources externes créées par Terraform
@@ -148,7 +146,6 @@ helm install cheerio-mcp-client ./deploy/web_search_mcp \
   --set image.repository=registry.example.local/cheerio-mcp-client \
   --set image.tag=latest \
   --set service.targetPort=80 \
-  --set client.enabled=true \
   --set client.server.serviceName=cheerio-mcp-server \
   --set client.server.port=3000 \
   --set client.server.protocol=http \
@@ -175,7 +172,6 @@ service:
   targetPort: 80
 
 client:
-  enabled: true
   server:
     # Nom du service du serveur (automatiquement résolu par Kubernetes DNS)
     serviceName: "cheerio-mcp-server"
@@ -388,7 +384,6 @@ resource "helm_release" "mcp_server" {
       tag        = var.server_version
     }
     server = {
-      enabled            = true
       externalConfigMap  = kubernetes_config_map.mcp_server_config.metadata[0].name
       externalSecret     = kubernetes_secret.mcp_server_secrets.metadata[0].name
     }
@@ -417,7 +412,6 @@ resource "helm_release" "mcp_client" {
       tag        = var.client_version
     }
     client = {
-      enabled = true
       server = {
         serviceName = "cheerio-mcp-server"
         port        = 3000
