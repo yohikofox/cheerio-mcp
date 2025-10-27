@@ -24,20 +24,138 @@ Chart Helm pour déployer les composants de Cheerio MCP sur Kubernetes :
 
 ## Installation Rapide
 
-### Déployer le Server
+Ce chart utilise un seul fichier `values.yaml` avec des valeurs par défaut. Les configurations spécifiques (environnement, server/client) sont passées via `--set` ou via un fichier de values externe.
+
+### Avec Helm CLI
+
+#### Déployer le Server
 
 ```bash
 helm install cheerio-mcp-server ./deploy/web_search_mcp \
-  -f ./deploy/values-server.yaml \
   --namespace cheerio-mcp \
-  --create-namespace
+  --create-namespace \
+  --set appType=server \
+  --set image.repository=registry.example.local/cheerio-mcp-server \
+  --set image.tag=v1.0.0 \
+  --set service.targetPort=3000 \
+  --set vnc.enabled=true
 ```
 
-### Déployer le Client
+#### Déployer le Client
 
 ```bash
 helm install cheerio-mcp-client ./deploy/web_search_mcp \
-  -f ./deploy/values-client.yaml \
+  --namespace cheerio-mcp \
+  --create-namespace \
+  --set appType=client \
+  --set image.repository=registry.example.local/cheerio-mcp-client \
+  --set image.tag=v1.0.0 \
+  --set service.targetPort=80 \
+  --set vnc.enabled=false
+```
+
+### Avec Terraform
+
+```hcl
+resource "helm_release" "cheerio_mcp_server" {
+  name       = "cheerio-mcp-server"
+  chart      = "./deploy/web_search_mcp"
+  namespace  = "cheerio-mcp"
+  create_namespace = true
+
+  values = [yamlencode({
+    appType = "server"
+    image = {
+      repository = var.registry_url + "/cheerio-mcp-server"
+      tag        = var.image_tag
+      pullPolicy = "IfNotPresent"
+    }
+    service = {
+      targetPort = 3000
+    }
+    vnc = {
+      enabled = true
+    }
+    ingress = {
+      enabled = true
+      hosts = [{
+        host = "mcp-api.${var.domain}"
+        paths = [{
+          path     = "/"
+          pathType = "Prefix"
+        }]
+      }]
+      tls = [{
+        secretName = "mcp-api-tls"
+        hosts      = ["mcp-api.${var.domain}"]
+      }]
+    }
+    resources = {
+      limits = {
+        cpu    = "1000m"
+        memory = "1Gi"
+      }
+      requests = {
+        cpu    = "200m"
+        memory = "512Mi"
+      }
+    }
+  })]
+}
+
+resource "helm_release" "cheerio_mcp_client" {
+  name       = "cheerio-mcp-client"
+  chart      = "./deploy/web_search_mcp"
+  namespace  = "cheerio-mcp"
+
+  values = [yamlencode({
+    appType = "client"
+    replicaCount = 3
+    image = {
+      repository = var.registry_url + "/cheerio-mcp-client"
+      tag        = var.image_tag
+      pullPolicy = "IfNotPresent"
+    }
+    service = {
+      targetPort = 80
+    }
+    vnc = {
+      enabled = false
+    }
+    autoscaling = {
+      enabled    = true
+      minReplicas = 3
+      maxReplicas = 10
+    }
+  })]
+}
+```
+
+### Avec un Fichier de Values Externe
+
+Pour des configurations complexes, créez votre propre fichier de values :
+
+```bash
+# my-server-values.yaml
+appType: server
+image:
+  repository: registry.example.local/cheerio-mcp-server
+  tag: v1.0.0
+service:
+  targetPort: 3000
+vnc:
+  enabled: true
+ingress:
+  enabled: true
+  hosts:
+    - host: mcp-api.example.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+# Installer
+helm install cheerio-mcp-server ./deploy/web_search_mcp \
+  -f my-server-values.yaml \
   --namespace cheerio-mcp \
   --create-namespace
 ```
@@ -92,13 +210,19 @@ helm install cheerio-mcp-server ./deploy/web_search_mcp \
 ### Mise à Jour du Déploiement
 
 ```bash
-# Mettre à jour le server
+# Mettre à jour le server avec Helm CLI
 helm upgrade cheerio-mcp-server ./deploy/web_search_mcp \
-  -f ./deploy/values-server.yaml
+  --set image.tag=v1.0.1
 
 # Mettre à jour le client
 helm upgrade cheerio-mcp-client ./deploy/web_search_mcp \
-  -f ./deploy/values-client.yaml
+  --set image.tag=v1.0.1
+
+# Ou avec un fichier de values personnalisé
+helm upgrade cheerio-mcp-server ./deploy/web_search_mcp \
+  -f my-server-values.yaml
+
+# Avec Terraform, modifier le module et faire terraform apply
 ```
 
 ### Désinstallation
@@ -230,12 +354,18 @@ helm lint ./deploy/web_search_mcp
 
 # Afficher les manifests générés (dry-run)
 helm install cheerio-mcp-server ./deploy/web_search_mcp \
-  -f ./deploy/values-server.yaml \
+  --set appType=server \
+  --set image.tag=v1.0.0 \
   --dry-run --debug
 
 # Template avec vos valeurs
 helm template cheerio-mcp-server ./deploy/web_search_mcp \
-  -f ./deploy/values-server.yaml
+  --set appType=server \
+  --set image.repository=registry.example.local/cheerio-mcp-server
+
+# Ou avec un fichier personnalisé
+helm template cheerio-mcp-server ./deploy/web_search_mcp \
+  -f my-server-values.yaml
 ```
 
 ### Tester le Déploiement

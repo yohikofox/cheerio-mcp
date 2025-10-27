@@ -1,14 +1,50 @@
 # Default values for cheerio-mcp
 # This chart can deploy either the server or client based on the values provided
+#
+# Usage with Terraform:
+#   resource "helm_release" "cheerio_mcp" {
+#     name       = "cheerio-mcp-server"
+#     chart      = "./deploy/web_search_mcp"
+#     namespace  = "cheerio-mcp"
+#
+#     values = [yamlencode({
+#       appType = "server"
+#       image = {
+#         repository = "registry.example.local/cheerio-mcp-server"
+#         tag = "v1.0.0"
+#       }
+#       ingress = {
+#         enabled = true
+#         hosts = [{
+#           host = "mcp-api.example.local"
+#           paths = [{ path = "/", pathType = "Prefix" }]
+#         }]
+#       }
+#     })]
+#   }
+
+# ============================================================================
+# Application Configuration
+# ============================================================================
+
+# Application type: "server" or "client"
+# This determines default configurations
+# - server: MCP API server with Playwright (port 3000, VNC enabled)
+# - client: Web UI served by nginx (port 80, VNC disabled)
+appType: server
 
 replicaCount: 1
 
-# Application type: server or client
-# This determines default configurations
-appType: server
+# ============================================================================
+# Image Configuration
+# ============================================================================
 
 image:
+  # For server:
   repository: registry.example.local/cheerio-mcp-server
+  # For client:
+  # repository: registry.example.local/cheerio-mcp-client
+
   pullPolicy: IfNotPresent
   tag: "latest"
 
@@ -16,11 +52,19 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# ============================================================================
+# Service Account
+# ============================================================================
+
 serviceAccount:
   create: true
   automount: true
   annotations: {}
   name: ""
+
+# ============================================================================
+# Pod Configuration
+# ============================================================================
 
 podAnnotations: {}
 podLabels: {}
@@ -37,16 +81,23 @@ securityContext:
     drop:
     - ALL
 
-# Service configuration
+# ============================================================================
+# Service Configuration
+# ============================================================================
+
 service:
   type: ClusterIP
   port: 80
-  # Target port - defaults based on appType
-  # server: 3000, client: 80
+  # Target port - adjust based on appType:
+  # - server: 3000 (Node.js MCP server)
+  # - client: 80 (nginx)
   targetPort: 3000
   annotations: {}
 
-# Ingress configuration
+# ============================================================================
+# Ingress Configuration
+# ============================================================================
+
 ingress:
   enabled: false
   className: "nginx"
@@ -56,17 +107,31 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+
+  # Example for server:
   hosts:
     - host: mcp.example.local
       paths:
         - path: /
           pathType: Prefix
+
+  # Example for client:
+  # hosts:
+  #   - host: mcp-ui.example.local
+  #     paths:
+  #       - path: /
+  #         pathType: Prefix
+
   tls:
     - secretName: cheerio-mcp-tls
       hosts:
         - mcp.example.local
 
-# Resource limits
+# ============================================================================
+# Resources
+# ============================================================================
+
+# Default resources (adjust based on appType and environment)
 resources:
   limits:
     cpu: 500m
@@ -75,7 +140,29 @@ resources:
     cpu: 100m
     memory: 256Mi
 
-# Health checks
+# Server recommendations:
+# resources:
+#   limits:
+#     cpu: 1000m
+#     memory: 1Gi
+#   requests:
+#     cpu: 200m
+#     memory: 512Mi
+
+# Client recommendations:
+# resources:
+#   limits:
+#     cpu: 200m
+#     memory: 128Mi
+#   requests:
+#     cpu: 50m
+#     memory: 64Mi
+
+# ============================================================================
+# Health Checks
+# ============================================================================
+
+# Default health checks (server: /health, client: /)
 livenessProbe:
   httpGet:
     path: /health
@@ -94,7 +181,29 @@ readinessProbe:
   timeoutSeconds: 3
   failureThreshold: 3
 
+# Client health checks (nginx doesn't have /health endpoint):
+# livenessProbe:
+#   httpGet:
+#     path: /
+#     port: http
+#   initialDelaySeconds: 5
+#   periodSeconds: 30
+#   timeoutSeconds: 3
+#   failureThreshold: 3
+#
+# readinessProbe:
+#   httpGet:
+#     path: /
+#     port: http
+#   initialDelaySeconds: 3
+#   periodSeconds: 10
+#   timeoutSeconds: 2
+#   failureThreshold: 3
+
+# ============================================================================
 # Autoscaling
+# ============================================================================
+
 autoscaling:
   enabled: false
   minReplicas: 1
@@ -119,49 +228,247 @@ autoscaling:
         periodSeconds: 30
       selectPolicy: Max
 
-# Additional volumes
-volumes: []
+# Client autoscaling example (more aggressive):
+# autoscaling:
+#   enabled: true
+#   minReplicas: 2
+#   maxReplicas: 5
+#   targetCPUUtilizationPercentage: 70
+#   targetMemoryUtilizationPercentage: 80
 
-# Additional volumeMounts
+# ============================================================================
+# Volumes
+# ============================================================================
+
+volumes: []
+# Example: Persistent volume for domain configs
+# volumes:
+#   - name: domain-configs
+#     persistentVolumeClaim:
+#       claimName: mcp-domain-configs
+
 volumeMounts: []
+# Example: Mount domain configs
+# volumeMounts:
+#   - name: domain-configs
+#     mountPath: /app/domain-configs
+
+# ============================================================================
+# Node Selection
+# ============================================================================
 
 nodeSelector: {}
+# Example: Run on specific node pool
+# nodeSelector:
+#   node-role: worker
 
 tolerations: []
 
 affinity: {}
+# Example: Prefer different nodes for HA
+# affinity:
+#   podAntiAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#     - weight: 100
+#       podAffinityTerm:
+#         labelSelector:
+#           matchExpressions:
+#           - key: app.kubernetes.io/name
+#             operator: In
+#             values:
+#             - web-search-mcp
+#         topologyKey: kubernetes.io/hostname
 
-# Environment variables
+# ============================================================================
+# Environment Variables
+# ============================================================================
+
+# Base environment variables (all deployments)
 env:
   PORT: "3000"
   NODE_ENV: "production"
   LOG_LEVEL: "info"
 
+# Server-specific env vars example:
+# env:
+#   PORT: "3000"
+#   NODE_ENV: "production"
+#   LOG_LEVEL: "info"
+#   DISPLAY: ":99"
+#   PLAYWRIGHT_HEADLESS: "false"
+
+# Development environment example:
+# env:
+#   PORT: "3000"
+#   NODE_ENV: "development"
+#   LOG_LEVEL: "debug"
+
 # ConfigMap data (will be converted to env vars)
+# Use for non-sensitive configuration
 config: {}
+# Example:
+# config:
+#   MAX_CONCURRENT_REQUESTS: "50"
+#   CACHE_TTL: "3600"
+
+# ============================================================================
+# Secrets
+# ============================================================================
 
 # Secret data (will be converted to env vars)
 # IMPORTANT: Store API keys in Kubernetes secrets, not in values files
-# Example:
+#
+# Best practice: Create secret separately and reference it
+#   kubectl create secret generic mcp-api-keys \
+#     --from-literal=MCP_API_KEYS="key1,key2,key3" \
+#     -n cheerio-mcp
+#
+# Then in deployment template, add:
+#   envFrom:
+#     - secretRef:
+#         name: mcp-api-keys
+#
+# Or use this for testing only (NOT production):
 # secrets:
-#   MCP_API_KEYS: "key1,key2,key3"
+#   MCP_API_KEYS: "your-secret-key-here"
 secrets: {}
+
+# ============================================================================
+# VNC Configuration (Server Only)
+# ============================================================================
 
 # VNC ports for server (only applicable when appType: server)
 # These will only be exposed if appType is server
+# Used for debugging Playwright browser sessions
 vnc:
   enabled: true
   vncPort: 5900
   novncPort: 6080
 
-# Server-specific configuration
+# Disable for client:
+# vnc:
+#   enabled: false
+
+# ============================================================================
+# Server-Specific Configuration
+# ============================================================================
+
 server:
   enabled: false
-  # Additional server-specific settings
+  # Playwright configuration
   playwright:
     headless: "false"
 
-# Client-specific configuration
+# Enable when appType: server
+# server:
+#   enabled: true
+#   playwright:
+#     headless: "false"
+
+# ============================================================================
+# Client-Specific Configuration
+# ============================================================================
+
 client:
   enabled: false
-  # Additional client-specific settings
+  # Add client-specific settings here if needed
+
+# Enable when appType: client
+# client:
+#   enabled: true
+
+# ============================================================================
+# Example Configurations for Different Scenarios
+# ============================================================================
+
+# --- SERVER PRODUCTION ---
+# appType: server
+# replicaCount: 1
+# image:
+#   repository: registry.example.local/cheerio-mcp-server
+#   tag: "v1.0.0"
+#   pullPolicy: Always
+# service:
+#   targetPort: 3000
+# vnc:
+#   enabled: true
+# ingress:
+#   enabled: true
+#   hosts:
+#     - host: mcp-api.example.local
+#       paths:
+#         - path: /
+#           pathType: Prefix
+# resources:
+#   limits:
+#     cpu: 1000m
+#     memory: 1Gi
+#   requests:
+#     cpu: 200m
+#     memory: 512Mi
+# server:
+#   enabled: true
+#   playwright:
+#     headless: "false"
+
+# --- CLIENT PRODUCTION ---
+# appType: client
+# replicaCount: 3
+# image:
+#   repository: registry.example.local/cheerio-mcp-client
+#   tag: "v1.0.0"
+#   pullPolicy: Always
+# service:
+#   targetPort: 80
+# vnc:
+#   enabled: false
+# ingress:
+#   enabled: true
+#   hosts:
+#     - host: mcp.example.local
+#       paths:
+#         - path: /
+#           pathType: Prefix
+# resources:
+#   limits:
+#     cpu: 200m
+#     memory: 128Mi
+#   requests:
+#     cpu: 50m
+#     memory: 64Mi
+# autoscaling:
+#   enabled: true
+#   minReplicas: 3
+#   maxReplicas: 10
+# client:
+#   enabled: true
+# livenessProbe:
+#   httpGet:
+#     path: /
+#     port: http
+# readinessProbe:
+#   httpGet:
+#     path: /
+#     port: http
+
+# --- DEVELOPMENT ---
+# appType: server
+# replicaCount: 1
+# image:
+#   tag: "dev"
+#   pullPolicy: Always
+# ingress:
+#   enabled: true
+#   tls: []
+# resources:
+#   limits:
+#     cpu: 500m
+#     memory: 512Mi
+#   requests:
+#     cpu: 100m
+#     memory: 256Mi
+# env:
+#   LOG_LEVEL: "debug"
+#   NODE_ENV: "development"
+# autoscaling:
+#   enabled: false
