@@ -104,6 +104,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=client
           file: "Dockerfile"
           context: "{{defaultContext}}:client"
+          provenance: false
           tags: |
             ${{ secrets.REGISTRY_SERVER }}/cheerio-mcp-client:${{ github.sha }}
             ${{ secrets.REGISTRY_SERVER }}/cheerio-mcp-client:${{ steps.version.outputs.version }}

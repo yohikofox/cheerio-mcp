@@ -13,6 +13,7 @@ import { searchGoogleStealth, searchGoogleAPI } from './searchEngines-google.js'
 import { scrapePage, scrapeMultiplePages, PageContent } from './scraper.js';
 import { scrapePageRaw, scrapeMultiplePagesRaw, RawPageContent } from './scraper-raw.js';
 import { scrapePageWithPlaywright, scrapeMultiplePagesWithPlaywright } from './scraper-playwright.js';
+import { downloadImage, imageToBase64 } from './image-utils.js';
 
 const server = new Server(
   {
@@ -302,6 +303,38 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['urls'],
+        },
+      },
+      {
+        name: 'download_image',
+        description: 'Download an image from a URL and save it to the local file system. Returns the file path and metadata.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            url: {
+              type: 'string',
+              description: 'The URL of the image to download',
+            },
+            outputPath: {
+              type: 'string',
+              description: 'Optional custom output path. If not provided, saves to ./downloads/{random-name}',
+            },
+          },
+          required: ['url'],
+        },
+      },
+      {
+        name: 'image_to_base64',
+        description: 'Convert an image to base64 data URL format. Accepts either a URL (http/https) or a local file path.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            input: {
+              type: 'string',
+              description: 'Either a URL (http/https) or a local file path to the image',
+            },
+          },
+          required: ['input'],
         },
       },
     ],
@@ -599,6 +632,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify(contents, null, 2),
           },
         ],
+      };
+    }
+
+    if (name === 'download_image') {
+      const { url, outputPath } = args as {
+        url: string;
+        outputPath?: string;
+      };
+
+      const result = await downloadImage(url, outputPath);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+        isError: !result.success,
+      };
+    }
+
+    if (name === 'image_to_base64') {
+      const { input } = args as {
+        input: string;
+      };
+
+      const result = await imageToBase64(input);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+        isError: !result.success,
       };
     }
 

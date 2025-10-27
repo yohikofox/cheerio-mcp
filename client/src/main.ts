@@ -9,17 +9,67 @@ let tools: MCPTool[] = [];
 
 // Initialize the app
 async function init() {
+  // Check if API key is stored in localStorage
+  const storedApiKey = localStorage.getItem('mcp_api_key');
+
+  if (storedApiKey) {
+    // Auto-connect with stored API key
+    await connectWithApiKey(storedApiKey);
+  } else {
+    // Show API key input form
+    renderApiKeyInput();
+  }
+}
+
+async function connectWithApiKey(apiKey: string | null) {
   renderLoading();
 
   try {
-    mcpClient = new MCPWebClient();
+    mcpClient = new MCPWebClient(apiKey || undefined);
     await mcpClient.connect();
 
     tools = await mcpClient.listTools();
 
+    // Store API key if connection successful
+    if (apiKey) {
+      localStorage.setItem('mcp_api_key', apiKey);
+    }
+
     renderUI();
   } catch (error) {
     renderError(error as Error);
+  }
+}
+
+function renderApiKeyInput() {
+  app.innerHTML = `
+    <div class="container">
+      <header>
+        <h1>MCP Web Client</h1>
+        <p>Model Context Protocol - Dynamic Tool Discovery</p>
+      </header>
+      <div class="api-key-form">
+        <h3>API Key Configuration</h3>
+        <p>Enter your API key to connect to the MCP server (leave empty if no authentication is required)</p>
+        <form id="api-key-form">
+          <div class="form-group">
+            <label for="api-key-input">API Key (Optional)</label>
+            <input type="password" id="api-key-input" name="apiKey" placeholder="Enter your API key">
+          </div>
+          <button type="submit">Connect</button>
+        </form>
+      </div>
+    </div>
+  `;
+
+  const form = document.getElementById('api-key-form');
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target as HTMLFormElement);
+      const apiKey = formData.get('apiKey') as string;
+      await connectWithApiKey(apiKey || null);
+    });
   }
 }
 
@@ -68,6 +118,7 @@ function renderUI() {
         </div>
         <div class="info">
           ${tools.length} tools available
+          <button id="logout-btn" style="margin-left: 10px; padding: 5px 10px; font-size: 12px;">Change API Key</button>
         </div>
       </div>
 
@@ -78,6 +129,18 @@ function renderUI() {
 
   renderTabs();
   renderToolPanels();
+
+  // Add logout button handler
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      localStorage.removeItem('mcp_api_key');
+      if (mcpClient) {
+        mcpClient.disconnect();
+      }
+      location.reload();
+    });
+  }
 
   // Activate first tab
   if (tools.length > 0) {

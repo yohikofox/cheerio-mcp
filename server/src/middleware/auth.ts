@@ -6,12 +6,13 @@ import { Request, Response, NextFunction } from 'express';
 const PUBLIC_ENDPOINTS = ['/health', '/'];
 
 /**
- * Authentication middleware using API Key header
+ * Authentication middleware using API Key header or query parameter
  *
  * Supports multiple API keys via MCP_API_KEYS environment variable (comma-separated)
  * Example: MCP_API_KEYS=key1,key2,key3
  *
  * Expected header: X-API-Key: your-secret-key
+ * Or query param: ?api_key=your-secret-key (for EventSource/SSE connections)
  *
  * Public endpoints (no auth required): /health, /
  * Protected endpoints: /mcp (all methods)
@@ -32,14 +33,15 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
-  // Check for API key in request headers
-  const providedKey = req.headers['x-api-key'] as string | undefined;
+  // Check for API key in request headers or query parameters
+  // Query parameter is used for EventSource/SSE since it doesn't support custom headers
+  const providedKey = (req.headers['x-api-key'] as string) || (req.query.api_key as string);
 
   if (!providedKey) {
     console.warn(`[Auth] Unauthorized: Missing API key - ${req.method} ${req.path} from ${req.ip}`);
     res.status(401).json({
       error: 'Unauthorized',
-      message: 'Missing API key. Please provide X-API-Key header.',
+      message: 'Missing API key. Please provide X-API-Key header or api_key query parameter.',
       code: 'MISSING_API_KEY'
     });
     return;

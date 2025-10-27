@@ -25,6 +25,8 @@ import {
   updateDomainConfig,
 } from "./domain-config-manager.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { corsMiddleware } from "./middleware/cors.js";
+import { downloadImage, imageToBase64 } from "./image-utils.js";
 
 // import { scrapePageWithPlaywright } from "./scraper-playwright-test.js";
 
@@ -34,6 +36,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../public")));
+
+// CORS middleware - Allow cross-origin requests from web clients
+app.use(corsMiddleware);
 
 // Authentication middleware
 // Protects all endpoints except /health and /
@@ -654,6 +659,40 @@ app.post("/mcp", async (req: Request, res: Response) => {
                 required: ["domain"],
               },
             },
+            {
+              name: "download_image",
+              description:
+                "Download an image from a URL and save it to the local file system. Returns the file path and metadata.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  url: {
+                    type: "string",
+                    description: "The URL of the image to download",
+                  },
+                  outputPath: {
+                    type: "string",
+                    description: "Optional custom output path. If not provided, saves to ./downloads/{random-name}",
+                  },
+                },
+                required: ["url"],
+              },
+            },
+            {
+              name: "image_to_base64",
+              description:
+                "Convert an image to base64 data URL format. Accepts either a URL (http/https) or a local file path.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  input: {
+                    type: "string",
+                    description: "Either a URL (http/https) or a local file path to the image",
+                  },
+                },
+                required: ["input"],
+              },
+            },
           ],
         };
         break;
@@ -1163,6 +1202,46 @@ app.post("/mcp", async (req: Request, res: Response) => {
                 ],
               };
             }
+            break;
+          }
+
+          case "download_image": {
+            const { url, outputPath } = args || {};
+
+            if (!url) {
+              throw new Error("Invalid params: 'url' is required");
+            }
+
+            const result = await downloadImage(url, outputPath);
+
+            toolResult = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(result, null, 2),
+                },
+              ],
+            };
+            break;
+          }
+
+          case "image_to_base64": {
+            const { input } = args || {};
+
+            if (!input) {
+              throw new Error("Invalid params: 'input' is required");
+            }
+
+            const result = await imageToBase64(input);
+
+            toolResult = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(result, null, 2),
+                },
+              ],
+            };
             break;
           }
 

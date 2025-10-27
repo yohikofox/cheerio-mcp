@@ -8,6 +8,15 @@ export interface MCPTool {
   };
 }
 
+// Runtime config from window.ENV (injected by Docker entrypoint)
+declare global {
+  interface Window {
+    ENV?: {
+      MCP_SERVER_URL?: string;
+    };
+  }
+}
+
 /**
  * Custom MCP client for browser using native EventSource and fetch
  */
@@ -18,18 +27,28 @@ export class MCPWebClient {
   private endpoint: string = '/mcp';
   private requestId: number = 1;
   private pendingRequests: Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }> = new Map();
+  private apiKey: string | null = null;
 
-  constructor() {}
+  constructor(apiKey?: string) {
+    this.apiKey = apiKey || null;
+  }
 
-  async connect(endpoint: string = '/mcp'): Promise<void> {
-    this.endpoint = endpoint;
+  async connect(endpoint?: string): Promise<void> {
+    // Use provided endpoint, or runtime config, or default to /mcp
+    this.endpoint = endpoint || (window.ENV?.MCP_SERVER_URL ? `${window.ENV.MCP_SERVER_URL}/mcp` : '/mcp');
 
-    console.log('[MCP Client] Connecting to:', endpoint);
+    console.log('[MCP Client] Connecting to:', this.endpoint);
 
     // First, establish SSE connection and get session ID
     await new Promise<void>((resolve, reject) => {
-      // Create EventSource connection
-      this.eventSource = new EventSource(endpoint);
+      // Create EventSource connection with API key if provided
+      let sseUrl = this.endpoint;
+      if (this.apiKey) {
+        sseUrl = `${this.endpoint}?api_key=${encodeURIComponent(this.apiKey)}`;
+        console.log('[MCP Client] Using API key authentication');
+      }
+
+      this.eventSource = new EventSource(sseUrl);
 
       // Handle connection opened
       this.eventSource.onopen = () => {
@@ -124,13 +143,21 @@ export class MCPWebClient {
 
     // Send POST request
     console.log(`[MCP Client] POST ${this.endpoint} with session:`, this.sessionId);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'MCP-Protocol-Version': this.protocolVersion,
+      'Mcp-Session-Id': this.sessionId,
+    };
+
+    // Add API key header if configured
+    if (this.apiKey) {
+      headers['X-API-Key'] = this.apiKey;
+    }
+
     const response = await fetch(this.endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'MCP-Protocol-Version': this.protocolVersion,
-        'Mcp-Session-Id': this.sessionId,
-      },
+      headers,
       body: JSON.stringify({
         jsonrpc: '2.0',
         id,
