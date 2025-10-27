@@ -68,17 +68,29 @@ spec:
         {{- if eq .Values.appType "client" }}
         {{- if .Values.client.enabled }}
         - name: MCP_SERVER_URL
-          value: {{ .Values.client.server.protocol }}://{{ .Values.client.server.serviceName }}{{- if .Values.client.server.namespace }}.{{ .Values.client.server.namespace }}.svc.cluster.local{{- end }}:{{ .Values.client.server.port }}
+          value: {{ include "web-search-mcp.mcpServerUrl" . | quote }}
         {{- end }}
         {{- end }}
-        {{- if .Values.config }}
+        {{- if or .Values.config .Values.secrets (and (eq .Values.appType "server") (or .Values.server.externalConfigMap .Values.server.externalSecret)) }}
         envFrom:
+        {{- if .Values.config }}
         - configMapRef:
             name: {{ include "web-search-mcp.fullname" . }}
         {{- end }}
         {{- if .Values.secrets }}
         - secretRef:
             name: {{ include "web-search-mcp.fullname" . }}
+        {{- end }}
+        {{- if eq .Values.appType "server" }}
+        {{- if .Values.server.externalConfigMap }}
+        - configMapRef:
+            name: {{ .Values.server.externalConfigMap }}
+        {{- end }}
+        {{- if .Values.server.externalSecret }}
+        - secretRef:
+            name: {{ .Values.server.externalSecret }}
+        {{- end }}
+        {{- end }}
         {{- end }}
         {{- if .Values.livenessProbe }}
         livenessProbe:

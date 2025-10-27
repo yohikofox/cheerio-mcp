@@ -358,12 +358,20 @@ server:
   # Playwright configuration
   playwright:
     headless: "false"
+  # External ConfigMap and Secret (created by Terraform)
+  # These resources are expected to exist and will be referenced via envFrom
+  # Set to empty string ("") to disable external resources
+  externalConfigMap: "mcp-server-config"
+  externalSecret: "mcp-server-secrets"
 
 # Enable when appType: server
 # server:
 #   enabled: true
 #   playwright:
 #     headless: "false"
+#   # To disable external resources, set to empty string:
+#   # externalConfigMap: ""
+#   # externalSecret: ""
 
 # ============================================================================
 # Client-Specific Configuration

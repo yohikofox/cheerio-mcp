@@ -13,9 +13,56 @@ Guide de déploiement du serveur et client MCP sur Kubernetes avec Helm.
 ```bash
 # Créer le namespace
 kubectl create namespace cheerio-mcp
+```
 
-# Créer le secret pour les API keys (production)
-kubectl create secret generic mcp-api-keys \
+### Configuration via Terraform (recommandé)
+
+Le serveur peut consommer des variables d'environnement depuis des ressources externes (ConfigMap et Secret) créées par Terraform. Ces ressources doivent être créées avant le déploiement du chart Helm.
+
+**Exemple Terraform :**
+
+```hcl
+# ConfigMap pour la configuration non-sensible
+resource "kubernetes_config_map" "mcp_server_config" {
+  metadata {
+    name      = "mcp-server-config"
+    namespace = "cheerio-mcp"
+  }
+
+  data = {
+    MAX_CONCURRENT_REQUESTS = "50"
+    CACHE_TTL              = "3600"
+    LOG_LEVEL              = "info"
+  }
+}
+
+# Secret pour les données sensibles
+resource "kubernetes_secret" "mcp_server_secrets" {
+  metadata {
+    name      = "mcp-server-secrets"
+    namespace = "cheerio-mcp"
+  }
+
+  data = {
+    MCP_API_KEYS = base64encode("key1,key2,key3")
+  }
+
+  type = "Opaque"
+}
+```
+
+### Création manuelle (alternative)
+
+```bash
+# Créer le ConfigMap
+kubectl create configmap mcp-server-config \
+  --from-literal=MAX_CONCURRENT_REQUESTS=50 \
+  --from-literal=CACHE_TTL=3600 \
+  --from-literal=LOG_LEVEL=info \
+  -n cheerio-mcp
+
+# Créer le Secret
+kubectl create secret generic mcp-server-secrets \
   --from-literal=MCP_API_KEYS="key1,key2,key3" \
   -n cheerio-mcp
 ```
@@ -56,6 +103,9 @@ server:
   enabled: true
   playwright:
     headless: "false"
+  # Références aux ressources externes créées par Terraform
+  externalConfigMap: "mcp-server-config"
+  externalSecret: "mcp-server-secrets"
 
 vnc:
   enabled: true
@@ -228,6 +278,9 @@ kubectl logs -f deployment/cheerio-mcp-client -n cheerio-mcp
 
 # Vérifier la variable d'environnement du client
 kubectl exec -it deployment/cheerio-mcp-client -n cheerio-mcp -- env | grep MCP_SERVER_URL
+
+# Vérifier les variables d'environnement du serveur (depuis ConfigMap et Secret externes)
+kubectl exec -it deployment/cheerio-mcp-server -n cheerio-mcp -- env | grep -E 'MCP_API_KEYS|MAX_CONCURRENT_REQUESTS|CACHE_TTL'
 ```
 
 ## Mise à jour
@@ -288,10 +341,45 @@ kubectl rollout restart deployment/cheerio-mcp-client -n cheerio-mcp
 ## Exemple complet avec Terraform
 
 ```hcl
+# ConfigMap pour la configuration du serveur
+resource "kubernetes_config_map" "mcp_server_config" {
+  metadata {
+    name      = "mcp-server-config"
+    namespace = "cheerio-mcp"
+  }
+
+  data = {
+    MAX_CONCURRENT_REQUESTS = "50"
+    CACHE_TTL              = "3600"
+    LOG_LEVEL              = "info"
+  }
+}
+
+# Secret pour les données sensibles du serveur
+resource "kubernetes_secret" "mcp_server_secrets" {
+  metadata {
+    name      = "mcp-server-secrets"
+    namespace = "cheerio-mcp"
+  }
+
+  data = {
+    MCP_API_KEYS = base64encode(var.mcp_api_keys)
+  }
+
+  type = "Opaque"
+}
+
+# Déploiement Helm du serveur
 resource "helm_release" "mcp_server" {
   name       = "cheerio-mcp-server"
   chart      = "./deploy/web_search_mcp"
   namespace  = "cheerio-mcp"
+
+  # Le serveur dépend des ressources de configuration
+  depends_on = [
+    kubernetes_config_map.mcp_server_config,
+    kubernetes_secret.mcp_server_secrets
+  ]
 
   values = [yamlencode({
     appType = "server"
@@ -300,7 +388,9 @@ resource "helm_release" "mcp_server" {
       tag        = var.server_version
     }
     server = {
-      enabled = true
+      enabled            = true
+      externalConfigMap  = kubernetes_config_map.mcp_server_config.metadata[0].name
+      externalSecret     = kubernetes_secret.mcp_server_secrets.metadata[0].name
     }
     ingress = {
       enabled = true

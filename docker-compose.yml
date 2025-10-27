@@ -49,7 +49,7 @@ services:
     environment:
       # MCP Server URL accessible from browser (not Docker network)
       # IMPORTANT: Must be accessible from the browser, not Docker internal DNS
-      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://localhost:3000}
+      - MCP_SERVER_URL=http://localhost:3001
     restart: unless-stopped
     healthcheck:
       test:
