@@ -90,7 +90,7 @@ service:
   port: 80
   # Target port - adjust based on appType:
   # - server: 3000 (Node.js MCP server)
-  # - client: 8080 (nginx running as non-root)
+  # - client: 8080 (serve running as non-root)
   targetPort: 3000
   annotations: {}
 

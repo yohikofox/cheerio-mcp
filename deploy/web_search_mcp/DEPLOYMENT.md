@@ -5,7 +5,7 @@ Guide de déploiement du serveur et client MCP sur Kubernetes avec Helm.
 ## Architecture
 
 - **Serveur** : API MCP avec Playwright (port 3000) + VNC (ports 5900, 6080)
-- **Client** : Interface web statique servie par nginx (port 8080, exposé via Service sur port 80)
+- **Client** : Interface web statique servie par serve (port 8080, exposé via Service sur port 80)
 - **Communication** : Le client se connecte au serveur via le DNS interne Kubernetes
 
 ## Prérequis

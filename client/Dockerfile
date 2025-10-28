@@ -15,24 +15,29 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Production stage with nginx
+# Production stage with serve
 FROM node:20-alpine AS production
 
-RUN  apk add --no-cache nginx wget
+WORKDIR /app
+
+# Install serve globally and wget for healthcheck
+RUN npm install -g serve && \
+    apk add --no-cache wget
 
 # Copy built files from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy nginx configuration (as main config, not in conf.d)
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/dist ./dist
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Create directories and set permissions for non-root user
-RUN mkdir -p /var/cache/nginx /var/run /var/log/nginx /var/lib/nginx/logs /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy /var/lib/nginx/tmp/fastcgi /var/lib/nginx/tmp/uwsgi /var/lib/nginx/tmp/scgi && \
-    chmod -R 777 /var/cache/nginx /var/run /var/log/nginx /var/lib/nginx /usr/share/nginx/html
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
 
 # Expose port 8080
 EXPOSE 8080
