@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # MCP Server - API backend with Playwright scraping
   mcp-server:
@@ -14,9 +12,8 @@ services:
       - DISPLAY=:99
       - NODE_ENV=production
       - PLAYWRIGHT_HEADLESS=false
-      # API Authentication (optional)
-      # Generate: docker run --rm node:20-alpine node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-      - MCP_API_KEYS=yolo
+      # OAuth disabled for n8n compatibility
+      - OAUTH_ENABLED=false
     volumes:
       - ./server/data:/app/domain-configs
     restart: unless-stopped
@@ -36,6 +33,34 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - mcp-network
+
+  # MCP Simple Server - Minimal test server
+  mcp-simple:
+    build:
+      context: ./mcp-simple-server
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000" # MCP simple server on port 3001
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - mcp-network
 
@@ -71,23 +96,79 @@ services:
     networks:
       - mcp-network
 
+  # n8n - Workflow Automation Platform
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    ports:
+      - "5678:5678" # n8n web interface
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=changeme
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/Paris
+      # Allow n8n to call MCP server via Docker network
+      - N8N_CUSTOM_EXTENSIONS=/data/custom
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./n8n/custom:/data/custom
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:5678/healthz",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "com.example.description=n8n Workflow Automation - Can integrate with MCP Server"
+      - "com.example.service=n8n"
+    networks:
+      - mcp-network
+
 networks:
   mcp-network:
     driver: bridge
+
+volumes:
+  n8n-data:
+    driver: local
 # Usage:
 # 1. Build and start all services:
 #    docker-compose up -d
 #
 # 2. View logs:
 #    docker-compose logs -f
+#    docker-compose logs -f n8n  # n8n logs only
 #
 # 3. Access services:
 #    - Web Client: http://localhost:8080
 #    - MCP API: http://localhost:3000
 #    - VNC Debug: http://localhost:6080
+#    - n8n UI: http://localhost:5678 (admin/changeme)
 #
-# 4. Stop services:
+# 4. n8n can call MCP server via Docker network:
+#    - MCP Server URL in n8n: http://mcp-server:3000
+#    - Example workflow: HTTP Request node → http://mcp-server:3000/mcp
+#
+# 5. Stop services:
 #    docker-compose down
 #
-# 5. With API authentication:
+# 6. Stop and remove volumes (will delete n8n workflows!):
+#    docker-compose down -v
+#
+# 7. With API authentication:
 #    MCP_API_KEYS=your-key-here docker-compose up -d
+#
+# 8. Change n8n password:
+#    Edit N8N_BASIC_AUTH_PASSWORD in docker-compose.yml

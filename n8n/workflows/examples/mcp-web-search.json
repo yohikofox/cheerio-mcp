@@ -1,0 +1,122 @@
+{
+  "name": "MCP Web Search Example",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mcp-server:3000/mcp",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json, text/event-stream"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "yolo"
+            },
+            {
+              "name": "MCP-Protocol-Version",
+              "value": "2025-06-18"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "jsonrpc",
+              "value": "2.0"
+            },
+            {
+              "name": "id",
+              "value": 1
+            },
+            {
+              "name": "method",
+              "value": "tools/call"
+            },
+            {
+              "name": "params",
+              "value": {
+                "name": "search_web",
+                "arguments": {
+                  "query": "Model Context Protocol",
+                  "engines": ["duckduckgo"],
+                  "maxResults": 5
+                }
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2",
+      "name": "HTTP Request - MCP Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse SSE response from MCP server\nconst responseData = $input.item.json.body;\n\n// Extract data from SSE format\nconst lines = responseData.split('\\n');\nconst dataLine = lines.find(line => line.startsWith('data: '));\n\nif (!dataLine) {\n  throw new Error('No SSE data line found in response');\n}\n\n// Parse JSON from data line\nconst jsonData = JSON.parse(dataLine.substring(6));\n\n// Extract search results\nif (jsonData.result && jsonData.result.content && jsonData.result.content.length > 0) {\n  const textContent = jsonData.result.content[0].text;\n  const searchResults = JSON.parse(textContent);\n  \n  return searchResults.map((result, index) => ({\n    json: {\n      position: index + 1,
+      title: result.title,
+      url: result.url,
+      snippet: result.snippet
+    }\n  }));\n}\n\nreturn [];"
+      },
+      "id": "3",
+      "name": "Parse SSE Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - MCP Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - MCP Search": {
+      "main": [
+        [
+          {
+            "node": "Parse SSE Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-28T12:00:00.000Z",
+  "versionId": "1"
+}

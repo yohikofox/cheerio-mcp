@@ -1,0 +1,23 @@
+# n8n data directory (contains workflows, credentials, etc.)
+# DO NOT commit to version control - contains sensitive data
+*.n8n/
+
+# Backup files
+n8n-backup/
+backups/
+
+# Credentials and secrets
+credentials/
+*.credentials.json
+.env
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keep example workflows
+!workflows/examples/
