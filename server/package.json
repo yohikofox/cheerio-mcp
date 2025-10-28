@@ -9,7 +9,13 @@
     "watch": "tsc --watch",
     "start": "node dist/index.js",
     "start:http": "node dist/server-http.js",
-    "start:mcp": "node dist/server-mcp-http.js"
+    "start:mcp": "node dist/server-mcp-http.js",
+    "start:mcp-sdk": "node dist/server-mcp-sdk.js",
+    "start:mcp-stateless": "node dist/server-mcp-stateless.js",
+    "start:mcp-stateful": "node dist/server-mcp-stateful.js",
+    "start:oauth-server": "node dist/oauth/oauth-server.js",
+    "test:oauth": "./test-oauth-flow.sh",
+    "test:no-auth": "./test-mcp-no-auth.sh"
   },
   "keywords": [
     "mcp",
