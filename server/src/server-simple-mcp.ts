@@ -48,9 +48,9 @@ server.registerTool(
     title: "Web Search",
     description: "Search the web using multiple search engines (Google, DuckDuckGo, Bing) and return organic results. Can filter results by allowed/excluded domains.",
     inputSchema: {
-      query: z.string(),
-      maxResults: z.number().default(10),
-      excludedDomains: z.string().default("fnac.com,darty.com,idealo.fr,.cz"),
+      query: z.string().describe("Search query"),
+      maxResults: z.coerce.number().default(10).describe("Maximum number of results to return"),
+      excludedDomains: z.string().default("fnac.com,darty.com,idealo.fr,.cz").describe("Comma-separated list of domains to exclude (e.g., 'fnac.com,darty.com')"),
     },
   },
   async ({ query, maxResults, excludedDomains }) => {
@@ -89,9 +89,9 @@ server.registerTool(
     title: "Scrape Page",
     description: "Extract structured data from a web page using Playwright - Returns YAML/JSON format",
     inputSchema: {
-      url: z.string(),
-      format: z.string().default("yaml"),
-      flatten: z.boolean().default(true),
+      url: z.string().describe("URL of the page to scrape"),
+      format: z.string().default("yaml").describe("Output format: 'yaml' or 'json'"),
+      flatten: z.coerce.boolean().default(true).describe("Flatten the data structure"),
     },
   },
   async ({ url, format, flatten }) => {
@@ -125,13 +125,15 @@ server.registerTool(
     title: "Scrape Multiple Pages",
     description: "Extract structured data from multiple web pages in parallel using Playwright",
     inputSchema: {
-      urls: z.array(z.string()),
-      format: z.string().default("yaml"),
-      flatten: z.boolean().default(true),
+      urls: z.string().describe("Comma-separated list of URLs to scrape (e.g., 'https://example.com,https://example.org')"),
+      format: z.string().default("yaml").describe("Output format: 'yaml' or 'json'"),
+      flatten: z.coerce.boolean().default(true).describe("Flatten the data structure"),
     },
   },
   async ({ urls, format, flatten }) => {
-    const results = await scrapeMultiplePagesWithPlaywright(urls);
+    // Convert comma-separated string to array
+    const urlsArray = urls.split(',').map((u: string) => u.trim()).filter((u: string) => u.length > 0);
+    const results = await scrapeMultiplePagesWithPlaywright(urlsArray);
     let outputText: string;
 
     if (flatten) {
@@ -162,8 +164,8 @@ server.registerTool(
     title: "Take Screenshot",
     description: "Take a screenshot of a web page using Playwright and return it as base64",
     inputSchema: {
-      url: z.string(),
-      fullPage: z.boolean().default(false),
+      url: z.string().describe("URL of the page to screenshot"),
+      fullPage: z.coerce.boolean().default(false).describe("Capture full scrollable page (true) or just viewport (false)"),
     },
   },
   async ({ url, fullPage }) => {
