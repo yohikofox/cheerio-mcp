@@ -98,7 +98,7 @@ stdout_logfile=/var/log/supervisor/novnc.log\n\
 stderr_logfile=/var/log/supervisor/novnc.err.log\n\
 \n\
 [program:mcp-server]\n\
-command=/bin/bash -c "sleep 5 && node /app/dist/server-mcp-http.js"\n\
+command=/bin/bash -c "sleep 5 && node /app/dist/server-simple-mcp.js"\n\
 autorestart=true\n\
 priority=500\n\
 environment=DISPLAY=:99\n\
@@ -152,7 +152,7 @@ stderr_logfile=/dev/stderr\n\
 stderr_logfile_maxbytes=0\n\
 \n\
 [program:mcp-server]\n\
-command=/bin/bash -c "sleep 5 && node /app/dist/server-mcp-http.js"\n\
+command=/bin/bash -c "sleep 5 && node /app/dist/server-simple-mcp.js"\n\
 autorestart=true\n\
 priority=500\n\
 environment=DISPLAY=:99\n\
