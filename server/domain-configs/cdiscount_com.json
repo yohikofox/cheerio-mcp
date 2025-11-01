@@ -1,0 +1,66 @@
+{
+  "domain": "cdiscount.com",
+  "learnedAt": "2025-10-27T03:18:41.721Z",
+  "sampleUrl": "https://www.cdiscount.com/telephonie/telephone-mobile/apple-iphone-17-pro-max-1tb-cosmic-orange/f-14404-ip17prom1torange.html",
+  "lastUsed": "2025-10-29T14:16:06.112Z",
+  "productInfo": {
+    "title": [
+      {
+        "selector": "[itemprop=\"name\"]",
+        "confidence": "high",
+        "value": "APPLE iPhone 17 Pro Max 1TB Cosmic Orange",
+        "method": "Product-specific class or itemprop"
+      }
+    ],
+    "brand": [],
+    "sku": [],
+    "color": [],
+    "storage": [],
+    "model": []
+  },
+  "structuredData": [
+    {
+      "type": "Product",
+      "format": "json-ld",
+      "selector": "script[type=\"application/ld+json\"]",
+      "data": {
+        "@type": "Product",
+        "brand": {
+          "@type": "Brand",
+          "name": "APPLE"
+        },
+        "name": "APPLE iPhone 17 Pro Max 1TB Cosmic Orange",
+        "color": "Orange",
+        "sku": "ip17prom1torange",
+        "image": ""
+      }
+    }
+  ],
+  "extractionStrategy": "structured",
+  "recommendations": [
+    "✅ Use JSON-LD structured data for reliable extraction of: brand, model, color, sku",
+    "✅ Extract storage capacity from product name: regex pattern '\\d+(?:GB|TB)'",
+    "✅ Selector: script[type=\"application/ld+json\"] → Product schema"
+  ],
+  "interactionSelectors": [
+    "button#ProductSheetAccordion-header-1"
+  ],
+  "revealedContent": [
+    {
+      "trigger": "Descriptif technique",
+      "selector": "#ProductSheetAccordion-content-1",
+      "fieldsToExtract": [
+        "Vintage",
+        "Catégorie",
+        "Marque"
+      ],
+      "structured": {
+        "Marque": "APPLE",
+        "Capacité (mémoire)": "1 To",
+        "Vintage": "Non",
+        "Catégorie": "SMARTPHONE",
+        "Année de sortie": "2025"
+      }
+    }
+  ]
+}
